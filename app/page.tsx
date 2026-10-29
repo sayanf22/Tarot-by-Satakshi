@@ -53,7 +53,7 @@ export default function HomePage() {
       {/* Hero: words on the left, three cards fanned on a turning mandala on the right. */}
       {/* Order on load: badge, title word by word, the line under it word by word,
           then the buttons and the icon row one at a time. */}
-      <section className="relative overflow-hidden bg-linear-to-b from-white via-white to-ivory">
+      <section className="relative overflow-hidden bg-linear-to-b from-white via-ivory to-white">
         {/* Soft warm light from the top left, behind the words. */}
         <div
           aria-hidden="true"
@@ -108,6 +108,11 @@ export default function HomePage() {
           </div>
           <HeroFan />
         </Container>
+        {/* Dissolves the warm light, rays and particles into the white page below. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-linear-to-b from-white/0 to-white lg:h-24"
+        />
       </section>
 
       <WordBand />
