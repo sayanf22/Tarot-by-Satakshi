@@ -35,7 +35,17 @@ export function SectionHeading({
       >
         <SplitWords text={title} />
       </Heading>
-      {description ? <p className="mt-4 text-lg text-ink-muted">{description}</p> : null}
+      {description ? (
+        <p
+          className={cn(
+            "mt-4 text-lg text-ink-muted",
+            // Page titles animate on load; section titles when scrolled into view.
+            Heading === "h1" ? "animate-rise [animation-delay:700ms]" : "reveal-late",
+          )}
+        >
+          {description}
+        </p>
+      ) : null}
     </Reveal>
   );
 }
