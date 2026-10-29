@@ -12,7 +12,8 @@ const year = new Date().getFullYear();
 
 // Black footer: a large brand line with the main action, then four columns (brand,
 // links, contact, hours) and a quiet bottom row.
-// Text: white 18:1, mist 14:1, gold-300 11:1 on black.
+// Pure black, no grain, with the slow-turning gold mandala in the corner.
+// Text: white 21:1, mist 14.5:1, gold-300 13.8:1 on black.
 
 function ColumnTitle({ children }: { children: ReactNode }) {
   return <p className="text-xs font-bold tracking-[0.24em] text-gold-300 uppercase">{children}</p>;
@@ -52,7 +53,7 @@ function LineLink({ href, icon: Icon, children }: { href: string; icon?: LucideI
 
 export function SiteFooter() {
   return (
-    <footer className="grain-dark relative mt-20 overflow-hidden rounded-t-[48px] bg-black text-white">
+    <footer className="relative mt-20 overflow-hidden rounded-t-[48px] bg-black text-white">
       <Mandala className="spin-slow pointer-events-none absolute -top-56 -right-56 w-[40rem] text-gold-500/15" />
       <Container className="relative">
         {/* Brand line and the main action. */}

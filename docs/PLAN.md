@@ -111,11 +111,11 @@ A warm, saturated gold (hue 40–44°). Tokens 200–600 are the metal itself an
 | `ink` | #1E1A14 | Headings and body text | 17.3:1 on white |
 | `ink-muted` | #5A5145 | Secondary text | 7.8:1 on white |
 | `line` | #EFE3C9 | Hairline borders | – |
-| `night` / `black` | #17140F / #0F0D0A | Dark card faces / footer | – |
+| `night` / `black` | #17140F / #000000 | Dark card faces / footer (pure black, no grain) | `gold-300` 13.8:1 on black |
 
 All contrast values were calculated with the WCAG formula. Two gold utilities in `app/globals.css`:
 
-- **`bg-gold-foil`:** a 115° gradient 200 → 400 → 600 → 400 → 200 at double width. On hover the shine slides across (`hover:bg-[position:100%_50%]`). Used for primary buttons, the word ribbon, the active booking step, the selected date and open FAQ toggles, always with ink text, plus `shadow-gold` (a light top edge and a warm glow).
+- **`bg-gold-foil`:** a 115° gradient 200 → 400 → 600 → 400 → 200 at double width. On hover the shine slides across (`hover:bg-[position:100%_50%]`). Used for primary buttons, the active booking step, the selected date and open FAQ toggles, always with ink text, plus `shadow-gold` (a light top edge and a warm glow).
 - **`text-gold-foil`:** gradient lettering for large accent words only, `gold-800` → #A87A1C → `gold-700` → `gold-800`. Its lightest stop is 3.8:1 on white, which passes for large text. Falls back to solid `gold-700`.
 
 ### Fonts: one pair, no italics or thin weights
@@ -133,9 +133,10 @@ All contrast values were calculated with the WCAG formula. Two gold utilities in
 - **No numbers as decoration:** icons replace Roman numerals and "Step 01" labels. Home steps show the icon on the left and the step number in its own circle on the right of the card's top row; the booking steps use icons and a check when done.
 - **Hero:** three colour RWS cards on a turning gold mandala, in front of a warm glow, slow gold light rays and thin orbit rings. With a mouse they arrive as a face-down pile, fan out and turn face up in turn; a mouse over the fan opens it wider and lifts the card under it. On phones (no hover) scrolling drives the same sequence and reverses it on the way back up. Tapping turns a single card.
 - **Text order on load:** the badge, then the title word by word (each word rises out of its own line), then the line under it word by word, then the buttons and the icon row one at a time. Section headings do the same when scrolled into view, with their description after the title.
-- **Footer:** a large brand line with Book and Ask buttons, then four columns (brand, Explore, Get in touch, Hours) and the legal row. Links draw a gold underline from the left on hover or focus. Two columns on phones.
+- **Word panel (home, under the hero):** a rounded champagne panel with a label, a headline whose words rise in slowly when it scrolls into view (1.2 s per word, 130 ms apart), and an endless strip of words with line-art icons that fades out at both edges. The strip moves with a transform only; the edge fades are two static gradients.
+- **Footer:** pure black, with the slow-turning gold mandala in the corner. A large brand line with Book and Ask buttons, then four columns (brand, Explore, Get in touch, Hours) and the legal row. Links draw a gold underline from the left on hover or focus. Two columns on phones.
 - **About:** intro with photo, three quick facts, "What she reads" (tarot and astrology, each with its engraved card), "What you can bring to a reading" (the topics from her approved booking form, beside the second photo), call or text sessions, FAQ. Her story, training and experience are added once she shares those facts.
-- **Decoration:** gold particles (no stars), gold mandalas, diamond-ended rules, one word ribbon.
+- **Decoration:** gold particles (no stars), gold mandalas, diamond-ended rules, one word strip.
 - **Photo frames** take the photo's own shape, so nothing is cropped.
 - **Motion:** words rise in, blocks fade up on scroll, the FAQ accordion eases open (grid rows 0fr → 1fr), the mobile menu fades in with staggered links. All of it is turned off for visitors who prefer reduced motion. Only transform and opacity animate.
 - **Contact in short form:** the FAQ, mobile menu and footer show Call, Email and Message buttons with icons, not the raw number. The Contact page still lists the number and email in full.
@@ -362,6 +363,7 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 - **`overrides`** in `package.json`: the Workers test pool pins older nested `sharp`, `undici` and `zod` versions with high-severity advisories. They're overridden to the patched versions (sharp 0.35.5, undici 7.30.1, zod 4.6.7). These are development-only tools. Remove the overrides once Cloudflare publishes a pool update.
 - **`allowScripts`:** the install scripts for esbuild and workerd, needed by Wrangler, are approved by exact version.
 - **Next.js 16 export bug on Windows** ([vercel/next.js#85374](https://github.com/vercel/next.js/issues/85374)): on Windows the export writes segment prefetch files as `about/__next.about/__PAGE__.txt` instead of `about/__next.about.__PAGE__.txt`, so every link prefetch 404s. `npm run build` runs `scripts/fix-export-segments.mjs` afterwards to rename them; on Linux (Workers Builds) the script finds nothing to fix. Remove it once Next.js ships the fix.
+- **Deploy build:** `wrangler.jsonc` has a `build` step (`scripts/cf-build.mjs`) that runs `npm run build` before `wrangler deploy`, so Workers Builds creates `./out` even with no build command set in the dashboard. The first deploy failed without it ("assets.directory … does not exist"). The script skips the build for `wrangler dev` and `wrangler types`. Leave the dashboard build command empty, or the site is built twice.
 - **Commands:** `npm run build` (static export plus the fix), `npm run preview` (build, then serve everything as one Worker on port 8787), `npm run screenshots` (Playwright screenshots, console errors and overflow at 375/768/1280 px).
 - **Deliberately not installed:** ESLint (see above); React Email (CPU cost in the Worker); an animation library (CSS is enough); a chart library (simple CSS bars for revenue); OpenNext; `@cloudflare/workers-types` (types come from `wrangler types`).
 
@@ -377,6 +379,7 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 | 2b Design refresh | **Done** | Playfair Display headings (as on the reference site, upright only), white background, rounded panels and cards, black footer, word-by-word heading animation, scroll reveals, Lenis smooth scrolling, longer home page (topics, call or text, what to have ready, four steps, FAQ) |
 | 2d White-and-gold refresh | **Done** | EB Garamond headings and Figtree body (the reference pairing, Medium and up, no italics); gold particles instead of stars; one word ribbon; hero card on a turning mandala; readings as a one-at-a-time slider with real Rider–Waite–Smith cards (1909, public domain, from Wikimedia Commons via `scripts/fetch-tarot-cards.mjs`; nude figures excluded); cards turn on hover or tap |
 | 2e Polished gold | **Done** | Greyish olive gold replaced with a warm gold scale (200–800); foil buttons, ribbon, steps, date picker and FAQ toggles with ink text; foil lettering on accent words; card line art regenerated in `gold-700`; favicon updated |
+| 2f Word panel and footer | **Done** | Gold ribbon replaced by a rounded champagne panel (label, slow word-by-word headline, icon word strip with edge fades); footer pure black with the turning mandala; deploy fixed with a Wrangler build step |
 | 2c Home redesign | **Done** | Hero of four tarot cards dealt from the centre that turn face up (tap to turn again); crossing word ribbons; "Meet Satakshi" with her two photos and a turning badge; readings as a fanned deck of flip cards; topics as a line of words; drawn four-step timeline; one black session panel; open FAQ list. Photos: originals in `image/` (not deployed), web versions made by `node scripts/process-photos.mjs` (watermark strip cropped, metadata removed, 480/800/1200 px WebP) |
 | 2 Public pages (sample data) | **Done** | Home, About, Services (with FAQ), Book (4 steps, Pay disabled), `/book/status`, Contact, 404. Legal pages wait for policy text; sitemap and share image wait for the domain |
 | 3 Admin UI (mock data) | | All admin screens |

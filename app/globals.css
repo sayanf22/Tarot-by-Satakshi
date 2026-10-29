@@ -30,7 +30,7 @@
   --color-line: #efe3c9;
   --color-night: #17140f; /* dark card faces */
   --color-night-700: #2a241a;
-  --color-black: #0f0d0a; /* footer */
+  --color-black: #000000; /* footer, pure black */
   --color-mist: #ddd6c9; /* secondary text on dark */
   --color-danger: #9b2c2c;
 
@@ -308,6 +308,27 @@
     opacity 0.8s var(--ease-soft),
     translate 0.8s var(--ease-soft);
   transition-delay: calc(var(--i) * 60ms + 120ms);
+}
+
+/* A slower reveal: the block itself stays still and only its words rise, one by one,
+   then the .reveal-late parts fade up after the last word. Opacity and translate only. */
+.reveal-slow[data-reveal] {
+  opacity: 1;
+  translate: none;
+}
+
+.reveal-slow[data-reveal="shown"] .w {
+  transition-duration: 1.2s;
+  transition-delay: calc(var(--i) * 130ms + 250ms);
+}
+
+.reveal-slow[data-reveal="shown"] .reveal-late {
+  transition-duration: 1s;
+  transition-delay: 1.3s;
+}
+
+.reveal-slow[data-reveal="shown"] .eyebrow.reveal-late {
+  transition-delay: 0s;
 }
 
 /* Lines that draw themselves when their <Reveal> block scrolls into view. */
