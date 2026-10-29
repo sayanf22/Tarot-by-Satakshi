@@ -109,24 +109,26 @@ All contrast values were calculated with the WCAG formula. Text never uses gradi
 
 ### Fonts: one pair, no italics or thin weights
 
-- **Headings: Marcellus** (400). A flared, engraved-Roman serif. It feels classical and suits tarot without being a script, and its strokes are solid. It has no italic style.
-- **Body and interface: Manrope** (400 body, 500 interface, 600 buttons and labels). A clean geometric sans that is very legible on mobile. It also has no italic style.
-- Labels and eyebrows: Manrope 600, 12–13 px, uppercase, letter-spaced, in `gold-700`.
-- Prices and times use tabular figures.
-- Sizes: display 56–64 px desktop and 36–40 px mobile; H2 40 px and 30 px; body 16–18 px with 1.7 line height.
+- **Headings: EB Garamond** (500 and 600, normal style only), the pairing from the user's wisprflow.ai reference.
+- **Body and interface: Figtree** (500 body, 600–700 buttons and labels). Nothing lighter than 500 anywhere.
+- Labels and eyebrows: Figtree 700, 12 px, uppercase, letter-spaced, in `gold-700`.
+- Prices and times use tabular, lining figures.
 - Both fonts are self-hosted with `next/font`, so no requests go to outside font servers.
 
-### Details that make it distinctive
+### Details that make it distinctive (as built, 29 October 2026)
 
-- **Tarot-card service cards:** tarot-card proportions (about 7:12), white with a fine double gold border, a Roman numeral at the top (I, II, III, as in the Major Arcana), a gold line-art icon, the name in Marcellus, and duration and price in Manrope. In the carousel, the centre card is raised, as in the reference.
-- **Arch photo frames** for portraits, with a gold outline offset by 8 px. Each frame matches the photo's own shape, so faces and hands are never cut off.
-- **Ornament divider:** a gold rule with a small four-point star at its centre, used under section titles.
-- **Hero background:** a faint gold constellation line pattern, kept away from text.
-- **Motion:** gentle fade-and-rise on scroll and smooth carousel slides, turned off for visitors who prefer reduced motion.
-- **Buttons:** solid `gold-700` with white text, or a `gold-700` outline. 4 px radius.
-- **Layout:** 1200 px maximum content width; 96–128 px section padding on desktop, 64 px on mobile.
+- **Readings deck (home):** the client's "Offerings & Insights" coverflow. The chosen card is raised in the middle and the others wait smaller behind it. Arrows, dots, swipe or a click on a side card move the deck, and it loops (wrapped cards fade in rather than crossing the deck). Hovering or tapping the middle card turns it over.
+- **Reading cards:** 7:11, white with a fine gold border. Front: gold line art made from the public-domain Rider–Waite–Smith card (`scripts/make-card-lineart.mjs`, card numerals cropped off), the name, an icon ornament and one line of text. Back: the full colour card, the session type, price (or a Sample tag) and a Book link. The Services page shows the same cards in a grid.
+- **No numbers as decoration:** icons replace Roman numerals and "Step 01" labels (home steps carry a small number badge on the icon; the booking steps use icons and a check when done).
+- **Hero:** three colour RWS cards on a turning gold mandala. They arrive as a face-down pile, fan out and turn face up in turn; a mouse over the fan opens it wider and lifts the card under it; tapping turns a card.
+- **Decoration:** gold particles (no stars), gold mandalas, diamond-ended rules, one word ribbon.
+- **Photo frames** take the photo's own shape, so nothing is cropped.
+- **Motion:** words rise in, blocks fade up on scroll, the FAQ accordion eases open (grid rows 0fr → 1fr), the mobile menu fades in with staggered links. All of it is turned off for visitors who prefer reduced motion. Only transform and opacity animate.
+- **Contact in short form:** the FAQ, mobile menu and footer show Call, Email and Message buttons with icons, not the raw number. The Contact page still lists the number and email in full.
+- **Buttons:** pill-shaped, solid `gold-700` with white text, or a `gold-700` outline.
+- **Layout:** 1200 px maximum content width.
 
-**Assets needed from Satakshi:** logo (or approval for a wordmark set in Marcellus), portrait photos, and service names for the line-art icons. We'll create the icons as SVGs in one consistent style.
+**Assets needed from Satakshi:** logo (or approval of the text wordmark), more photos, testimonials, and her real services with prices and durations.
 
 ---
 

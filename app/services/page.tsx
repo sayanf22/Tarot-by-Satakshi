@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { TurnableReadingCard } from "@/components/cards/reading-card";
 import { PageIntro } from "@/components/layout/page-intro";
+import { Reveal } from "@/components/motion/reveal";
+import { AskPanel } from "@/components/sections/ask-panel";
 import { BookingCta } from "@/components/sections/booking-cta";
 import { FaqList } from "@/components/sections/faq-list";
-import { Reveal } from "@/components/motion/reveal";
-import { ServiceCard } from "@/components/services/service-card";
 import { Container } from "@/components/ui/container";
+import { RuleTitle } from "@/components/ui/rule-title";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { services } from "@/content/services";
 import { categoryLabels, type ServiceCategory } from "@/lib/types";
@@ -18,10 +20,8 @@ export const metadata: Metadata = {
 const order: ServiceCategory[] = ["tarot", "astrology"];
 
 export default function ServicesPage() {
-  // Keep each card's numeral the same as on the home carousel.
-  const numbered = services.map((service, index) => ({ service, index }));
   const groups = order
-    .map((category) => ({ category, items: numbered.filter(({ service }) => service.category === category) }))
+    .map((category) => ({ category, items: services.filter((s) => s.category === category) }))
     .filter((group) => group.items.length > 0);
 
   return (
@@ -29,27 +29,23 @@ export default function ServicesPage() {
       <PageIntro
         eyebrow="Services"
         title="Readings"
-        description="Choose a reading, then pick a time that suits you."
+        description="Hover or tap a card to turn it, then book the reading that fits your question."
       />
 
-      <div className="py-20 lg:py-28">
+      <div className="overflow-x-clip py-20 lg:py-28">
         {groups.map((group) => (
-          <section key={group.category} aria-labelledby={`cat-${group.category}`} className="mb-20 last:mb-0">
+          <section
+            key={group.category}
+            aria-label={categoryLabels[group.category]}
+            className="mb-24 last:mb-0"
+          >
             <Container>
-              <div className="flex items-center gap-5">
-                <h2 id={`cat-${group.category}`} className="text-3xl sm:text-4xl">
-                  {categoryLabels[group.category]}
-                </h2>
-                <span
-                  aria-hidden="true"
-                  className="h-px flex-1 bg-linear-to-r from-gold-500 to-transparent"
-                />
-              </div>
-              <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {group.items.map(({ service, index }, i) => (
-                  <li key={service.slug}>
-                    <Reveal delay={(i % 4) * 80} className="h-full">
-                      <ServiceCard service={service} index={index} />
+              <RuleTitle title={categoryLabels[group.category]} />
+              <ul className="mt-12 flex flex-wrap justify-center gap-6">
+                {group.items.map((service, i) => (
+                  <li key={service.slug} className="w-[min(100%,260px)]">
+                    <Reveal delay={(i % 4) * 90}>
+                      <TurnableReadingCard service={service} />
                     </Reveal>
                   </li>
                 ))}
@@ -60,10 +56,13 @@ export default function ServicesPage() {
       </div>
 
       <section className="py-20 lg:py-24">
-        <Container>
+        <Container className="max-w-3xl">
           <SectionHeading eyebrow="Before you book" title="Good to know" />
           <Reveal className="mt-12">
             <FaqList />
+          </Reveal>
+          <Reveal className="mt-10">
+            <AskPanel />
           </Reveal>
         </Container>
       </section>

@@ -1,14 +1,25 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarClock,
+  Clock,
+  CreditCard,
+  Layers,
+  MailCheck,
+  MessageCircle,
+  PhoneCall,
+  type LucideIcon,
+} from "lucide-react";
+import { Mandala } from "@/components/art/mandala";
 import { Particles } from "@/components/art/particles";
-import { TarotArt } from "@/components/art/tarot-art";
-import { HeroCard } from "@/components/home/hero-card";
-import { ReadingsSlider } from "@/components/home/readings-slider";
+import { HeroFan } from "@/components/home/hero-fan";
+import { ReadingsDeck } from "@/components/home/readings-deck";
 import { SessionChoice } from "@/components/home/session-panel";
 import { WordBand } from "@/components/home/word-bands";
 import { Photo } from "@/components/media/photo";
 import { Reveal } from "@/components/motion/reveal";
 import { SplitWords } from "@/components/motion/split-words";
+import { AskPanel } from "@/components/sections/ask-panel";
 import { FaqList } from "@/components/sections/faq-list";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
@@ -18,35 +29,49 @@ import { services } from "@/content/services";
 import { topicCards } from "@/content/topics";
 import { cn } from "@/lib/cn";
 import { site } from "@/lib/site";
-import type { ServiceIcon } from "@/lib/types";
 
-const steps: ReadonlyArray<{ title: string; text: string; icon: ServiceIcon }> = [
-  { title: "Choose a reading", text: "Then pick a call or a text session.", icon: "cards" },
+const steps: ReadonlyArray<{ title: string; text: string; icon: LucideIcon }> = [
+  { title: "Choose a reading", text: "Then pick a call or a text session.", icon: Layers },
   {
     title: "Pick a time",
     text: `${site.hours.daysShort}, ${site.hours.time} ${site.hours.timeZone}.`,
-    icon: "sun",
+    icon: CalendarClock,
   },
-  { title: "Pay online", text: "As the last step of booking.", icon: "wheel" },
-  { title: "Get confirmed", text: `By email. Then ${site.firstName} reaches out.`, icon: "star" },
+  { title: "Pay online", text: "As the last step of booking.", icon: CreditCard },
+  { title: "Get confirmed", text: `By email. Then ${site.firstName} reaches out.`, icon: MailCheck },
+];
+
+const heroFacts: ReadonlyArray<{ icon: LucideIcon; label: string }> = [
+  { icon: PhoneCall, label: "Call" },
+  { icon: MessageCircle, label: "Text" },
+  { icon: Clock, label: `${site.hours.daysShort}, ${site.hours.time}` },
 ];
 
 export default function HomePage() {
   return (
     <>
-      {/* Hero: words on the left, a card on a turning mandala on the right (like the reference). */}
+      {/* Hero: words on the left, three cards fanned on a turning mandala on the right. */}
       <section className="relative overflow-hidden">
         <Particles count={30} seed={5} />
-        <Container className="relative grid items-center gap-10 pt-8 pb-14 lg:min-h-[min(calc(100svh-5rem),780px)] lg:grid-cols-[1.05fr_1fr] lg:gap-6 lg:py-10">
+        <Container className="relative grid items-center gap-8 pt-8 pb-14 lg:min-h-[min(calc(100svh-5rem),800px)] lg:grid-cols-[1fr_1fr] lg:gap-4 lg:py-10">
           <div className="text-center lg:text-left">
-            <p className="animate-rise eyebrow">With {site.owner}</p>
-            <h1 className="hero-words mt-5 text-[3.1rem] leading-[1.02] sm:text-[4.4rem] lg:text-[5.2rem]">
-              <SplitWords text="Clarity, one card at a time." accent={[0]} />
-            </h1>
-            <p className="mx-auto mt-6 max-w-md animate-rise text-lg text-ink-muted [animation-delay:500ms] sm:text-xl lg:mx-0">
-              Personal tarot and astrology readings, on call or text.
+            <p className="inline-flex animate-rise items-center gap-2.5 rounded-full bg-ivory py-1.5 pr-4 pl-1.5 text-sm font-semibold text-ink ring-1 ring-gold-500/50">
+              <span className="flex size-7 items-center justify-center rounded-full bg-gold-700 text-white">
+                <Layers className="size-3.5" strokeWidth={2} aria-hidden="true" />
+              </span>
+              With {site.owner}
             </p>
-            <div className="mt-9 flex animate-rise flex-wrap justify-center gap-4 [animation-delay:650ms] lg:justify-start">
+            <h1 className="hero-words mt-6 text-[3.2rem] leading-[1.02] sm:text-[4.5rem] lg:text-[5.3rem]">
+              <SplitWords text="Clarity," accent={[0]} />
+              <br />
+              <SplitWords text="one card" start={1} />
+              <br />
+              <SplitWords text="at a time." start={3} />
+            </h1>
+            <p className="mx-auto mt-6 max-w-md animate-rise text-lg text-ink-muted [animation-delay:550ms] sm:text-xl lg:mx-0">
+              Personal tarot and astrology readings, on a call or over text.
+            </p>
+            <div className="mt-9 flex animate-rise flex-wrap justify-center gap-4 [animation-delay:700ms] lg:justify-start">
               <ButtonLink href="/book">
                 Book a session
                 <ArrowRight className="size-4" aria-hidden="true" />
@@ -55,20 +80,30 @@ export default function HomePage() {
                 Explore readings
               </ButtonLink>
             </div>
+            <ul className="mt-10 flex animate-rise flex-wrap justify-center gap-x-6 gap-y-3 text-[0.95rem] font-semibold text-ink [animation-delay:850ms] lg:justify-start">
+              {heroFacts.map(({ icon: Icon, label }) => (
+                <li key={label} className="flex items-center gap-2">
+                  <span className="flex size-8 items-center justify-center rounded-full bg-champagne text-gold-800">
+                    <Icon className="size-4" strokeWidth={1.9} aria-hidden="true" />
+                  </span>
+                  {label}
+                </li>
+              ))}
+            </ul>
           </div>
-          <HeroCard />
+          <HeroFan />
         </Container>
       </section>
 
       <WordBand />
 
-      {/* Readings: one at a time, words beside a real tarot card. */}
-      <section id="readings" className="scroll-mt-24 py-16 lg:py-24">
+      {/* Readings: a deck of engraved cards; the middle one turns over to book. */}
+      <section id="readings" className="scroll-mt-24 overflow-x-clip py-16 lg:py-24">
         <Container>
           <RuleTitle eyebrow="Readings" title="Choose your reading" />
-          <Reveal className="mt-12">
-            <ReadingsSlider services={services} />
-          </Reveal>
+          <div className="mt-12 lg:mt-14">
+            <ReadingsDeck services={services} />
+          </div>
         </Container>
       </section>
 
@@ -131,6 +166,7 @@ export default function HomePage() {
           <ol className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {steps.map((s, i) => {
               const dark = i % 2 === 0;
+              const Icon = s.icon;
               return (
                 <li key={s.title}>
                   <Reveal delay={i * 90} className="h-full">
@@ -140,24 +176,34 @@ export default function HomePage() {
                         dark ? "grain-dark bg-night text-white" : "bg-white ring-1 ring-gold-500/60",
                       )}
                     >
-                      <div className="relative flex items-start justify-between">
+                      <Mandala
+                        className={cn(
+                          "pointer-events-none absolute -top-16 -right-16 size-48 transition-[rotate] duration-[1400ms] ease-soft group-hover:rotate-45",
+                          dark ? "text-gold-500/25" : "text-gold-500/30",
+                        )}
+                      />
+                      <span className="relative inline-flex">
                         <span
                           className={cn(
-                            "font-display text-sm font-bold tracking-[0.18em] tabular",
-                            dark ? "text-gold-300" : "text-gold-800",
+                            "flex size-16 items-center justify-center rounded-full ring-1 transition-transform duration-500 ease-soft group-hover:scale-105",
+                            dark
+                              ? "bg-night-700 text-gold-300 ring-gold-500/50"
+                              : "bg-champagne text-gold-800 ring-gold-500/40",
                           )}
                         >
-                          STEP 0{i + 1}
+                          <Icon className="size-7" strokeWidth={1.6} aria-hidden="true" />
                         </span>
-                        <TarotArt
-                          icon={s.icon}
+                        <span
+                          aria-hidden="true"
                           className={cn(
-                            "size-16 transition-transform duration-700 ease-soft group-hover:rotate-[30deg]",
-                            dark ? "text-gold-500" : "text-gold-700",
+                            "absolute -top-1 -right-1 flex size-6 items-center justify-center rounded-full text-xs font-bold tabular ring-2",
+                            dark ? "bg-gold-300 text-ink ring-night" : "bg-gold-700 text-white ring-white",
                           )}
-                        />
-                      </div>
-                      <h3 className={cn("relative mt-6 text-xl", dark && "text-white")}>{s.title}</h3>
+                        >
+                          {i + 1}
+                        </span>
+                      </span>
+                      <h3 className={cn("relative mt-7 text-xl", dark && "text-white")}>{s.title}</h3>
                       <p className={cn("relative mt-2", dark ? "text-mist" : "text-ink-muted")}>{s.text}</p>
                     </div>
                   </Reveal>
@@ -182,18 +228,8 @@ export default function HomePage() {
           <Reveal className="mt-10">
             <FaqList />
           </Reveal>
-          <Reveal className="mt-10 text-center">
-            <p className="text-ink-muted">
-              Something else on your mind?{" "}
-              <a href={site.phone.href} className="font-bold text-gold-800 hover:underline">
-                Call {site.phone.display}
-              </a>{" "}
-              or{" "}
-              <Link href="/contact" className="font-bold text-gold-800 hover:underline">
-                send a message
-              </Link>
-              .
-            </p>
+          <Reveal className="mt-10">
+            <AskPanel />
           </Reveal>
         </Container>
       </section>

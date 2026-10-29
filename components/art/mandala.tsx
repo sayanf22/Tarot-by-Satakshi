@@ -7,9 +7,13 @@ function diamond(cx: number, cy: number, r: number) {
   return `M${cx} ${cy - r}L${cx + r} ${cy}L${cx} ${cy + r}L${cx - r} ${cy}Z`;
 }
 
+// Rounded so the server and the browser print the same numbers (their trig
+// functions can differ in the last digits, which breaks hydration).
+const round = (v: number) => Math.round(v * 1000) / 1000;
+
 function polar(r: number, deg: number) {
   const a = ((deg - 90) * Math.PI) / 180;
-  return [100 + r * Math.cos(a), 100 + r * Math.sin(a)] as const;
+  return [round(100 + r * Math.cos(a)), round(100 + r * Math.sin(a))] as const;
 }
 
 export function Mandala({ className, detailed = true }: { className?: string; detailed?: boolean }) {

@@ -15,7 +15,12 @@
       }
     ],
     "source": "https://commons.wikimedia.org/wiki/File:RWS_Tarot_18_Moon.jpg",
-    "licence": "Public domain"
+    "licence": "Public domain",
+    "line": {
+      "src": "/images/tarot/moon-line.webp",
+      "width": 480,
+      "height": 729
+    }
   },
   "priestess": {
     "name": "The High Priestess",
@@ -33,7 +38,12 @@
       }
     ],
     "source": "https://commons.wikimedia.org/wiki/File:RWS_Tarot_02_High_Priestess.jpg",
-    "licence": "Public domain"
+    "licence": "Public domain",
+    "line": {
+      "src": "/images/tarot/priestess-line.webp",
+      "width": 480,
+      "height": 726
+    }
   },
   "two-cups": {
     "name": "Two of Cups",
@@ -51,7 +61,12 @@
       }
     ],
     "source": "https://commons.wikimedia.org/wiki/File:Cups02.jpg",
-    "licence": "Public domain"
+    "licence": "Public domain",
+    "line": {
+      "src": "/images/tarot/two-cups-line.webp",
+      "width": 480,
+      "height": 732
+    }
   },
   "ace-pentacles": {
     "name": "Ace of Pentacles",
@@ -69,7 +84,12 @@
       }
     ],
     "source": "https://commons.wikimedia.org/wiki/File:Pents01.jpg",
-    "licence": "Public domain"
+    "licence": "Public domain",
+    "line": {
+      "src": "/images/tarot/ace-pentacles-line.webp",
+      "width": 480,
+      "height": 732
+    }
   },
   "wheel": {
     "name": "Wheel of Fortune",
@@ -87,7 +107,12 @@
       }
     ],
     "source": "https://commons.wikimedia.org/wiki/File:RWS_Tarot_10_Wheel_of_Fortune.jpg",
-    "licence": "Public domain"
+    "licence": "Public domain",
+    "line": {
+      "src": "/images/tarot/wheel-line.webp",
+      "width": 480,
+      "height": 735
+    }
   },
   "hermit": {
     "name": "The Hermit",
@@ -105,6 +130,11 @@
       }
     ],
     "source": "https://commons.wikimedia.org/wiki/File:RWS_Tarot_09_Hermit.jpg",
-    "licence": "Public domain"
+    "licence": "Public domain",
+    "line": {
+      "src": "/images/tarot/hermit-line.webp",
+      "width": 480,
+      "height": 722
+    }
   }
 }

@@ -5,9 +5,12 @@ import type { ServiceIcon } from "@/lib/types";
 
 // Gold line art drawn on a 120 x 120 grid. Strokes stay 1.5px at any size.
 
+// Rounded so the server and the browser print the same numbers (hydration).
+const round = (v: number) => Math.round(v * 1000) / 1000;
+
 function polar(r: number, deg: number, cx = 60, cy = 60) {
   const a = (deg * Math.PI) / 180;
-  return [cx + r * Math.cos(a), cy + r * Math.sin(a)] as const;
+  return [round(cx + r * Math.cos(a)), round(cy + r * Math.sin(a))] as const;
 }
 
 function rays(count: number, inner: number, outerLong: number, outerShort: number, offset = -90) {

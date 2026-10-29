@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { Menu, X } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Clock, Mail, Menu, PhoneCall, X } from "lucide-react";
 import { Wordmark } from "@/components/brand/wordmark";
-import { ButtonLink } from "@/components/ui/button";
+import { ButtonLink, buttonClasses } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Ornament } from "@/components/ui/ornament";
 import { cn } from "@/lib/cn";
@@ -71,8 +71,10 @@ export function SiteHeader() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 border-b bg-white/95 backdrop-blur-sm transition-[border-color,box-shadow] duration-300",
-        scrolled ? "border-line shadow-[0_8px_30px_-24px_rgb(110_82_32/0.45)]" : "border-transparent",
+        // Solid white, no backdrop blur: a blur under a sticky bar is redrawn on every
+        // scroll frame, which costs smoothness on phones.
+        "sticky top-0 z-40 border-b bg-white transition-[border-color,box-shadow] duration-300",
+        scrolled ? "border-line shadow-[0_10px_30px_-26px_rgb(30_26_20/0.35)]" : "border-transparent",
       )}
     >
       <Container className="flex h-20 items-center justify-between lg:grid lg:grid-cols-[1fr_auto_1fr]">
@@ -110,7 +112,7 @@ export function SiteHeader() {
         id="mobile-menu"
         aria-label="Menu"
         onClose={() => setOpen(false)}
-        className="m-0 h-dvh max-h-none w-full max-w-none flex-col overflow-y-auto border-0 bg-white p-0 text-ink backdrop:bg-ink/30 open:flex lg:hidden"
+        className="menu-dialog m-0 h-dvh max-h-none w-full max-w-none flex-col overflow-y-auto border-0 bg-white p-0 text-ink open:flex lg:hidden"
       >
         <Container className="flex h-20 shrink-0 items-center justify-between">
           <Wordmark onClick={closeMenu} />
@@ -126,7 +128,7 @@ export function SiteHeader() {
         </Container>
 
         <nav aria-label="Mobile" className="flex flex-1 flex-col items-center justify-center gap-7 py-10">
-          {navigation.map((item) => {
+          {navigation.map((item, i) => {
             const active = isActive(pathname, item.href);
             return (
               <Link
@@ -134,25 +136,36 @@ export function SiteHeader() {
                 href={item.href}
                 onClick={closeMenu}
                 aria-current={active ? "page" : undefined}
-                className={cn("font-display text-4xl", active ? "text-gold-800" : "text-ink")}
+                style={{ "--i": i } as CSSProperties}
+                className={cn("menu-item font-display text-4xl", active ? "text-gold-800" : "text-ink")}
               >
                 {item.label}
               </Link>
             );
           })}
-          <Ornament className="mt-2" />
-          <ButtonLink href="/book" onClick={closeMenu} className="mt-2">
-            Book a session
-          </ButtonLink>
+          <Ornament className="menu-item mt-2 [--i:4]" />
+          <span className="menu-item mt-2 [--i:5]">
+            <ButtonLink href="/book" onClick={closeMenu}>
+              Book a session
+            </ButtonLink>
+          </span>
         </nav>
 
-        <div className="shrink-0 pb-10 text-center text-sm text-ink-muted">
-          <p>
-            {site.hours.daysShort} · {site.hours.time} {site.hours.timeZone}
+        <div className="menu-item flex shrink-0 flex-col items-center gap-4 pb-10 text-sm [--i:6]">
+          <p className="flex items-center gap-2 font-semibold text-ink-muted">
+            <Clock className="size-4 text-gold-700" strokeWidth={1.9} aria-hidden="true" />
+            {site.hours.daysShort}, {site.hours.time} {site.hours.timeZone}
           </p>
-          <a href={site.phone.href} className="mt-1 inline-block font-semibold text-gold-800">
-            {site.phone.display}
-          </a>
+          <div className="flex gap-3">
+            <a href={site.phone.href} className={buttonClasses({ variant: "outline", size: "sm" })}>
+              <PhoneCall className="size-4" strokeWidth={1.9} aria-hidden="true" />
+              Call
+            </a>
+            <a href={`mailto:${site.email}`} className={buttonClasses({ variant: "outline", size: "sm" })}>
+              <Mail className="size-4" strokeWidth={1.9} aria-hidden="true" />
+              Email
+            </a>
+          </div>
         </div>
       </dialog>
     </header>

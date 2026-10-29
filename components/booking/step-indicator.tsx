@@ -1,8 +1,10 @@
-import { Check } from "lucide-react";
+import { CalendarDays, Check, ClipboardCheck, Layers, UserRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export const bookingSteps = ["Reading", "Date & time", "Your details", "Review"] as const;
 export type StepNumber = 1 | 2 | 3 | 4;
+
+const stepIcons = [Layers, CalendarDays, UserRound, ClipboardCheck] as const;
 
 type Props = { current: StepNumber; onSelect: (step: StepNumber) => void };
 
@@ -14,17 +16,18 @@ export function StepIndicator({ current, onSelect }: Props) {
           const n = (i + 1) as StepNumber;
           const done = n < current;
           const active = n === current;
+          const Icon = done ? Check : stepIcons[i]!;
           const content = (
             <>
               <span
                 className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold tabular transition-colors",
-                  active && "border-gold-700 bg-gold-700 text-white",
-                  done && "border-gold-700 bg-white text-gold-800",
+                  "flex size-10 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,color,scale] duration-500 ease-soft",
+                  active && "scale-105 border-gold-700 bg-gold-700 text-white shadow-soft",
+                  done && "border-gold-700 bg-champagne text-gold-800",
                   !active && !done && "border-line bg-white text-ink-muted",
                 )}
               >
-                {done ? <Check className="size-4" aria-hidden="true" /> : n}
+                <Icon className="size-[1.1rem]" strokeWidth={done ? 2.25 : 1.75} aria-hidden="true" />
               </span>
               <span
                 className={cn(
@@ -54,7 +57,16 @@ export function StepIndicator({ current, onSelect }: Props) {
                   {content}
                 </span>
               )}
-              {n < 4 ? <span aria-hidden="true" className="h-px w-5 bg-line sm:w-8" /> : null}
+              {n < 4 ? (
+                <span aria-hidden="true" className="relative h-px w-5 overflow-hidden bg-line sm:w-8">
+                  <span
+                    className={cn(
+                      "absolute inset-0 origin-left bg-gold-700 transition-[scale] duration-700 ease-soft",
+                      done ? "scale-x-100" : "scale-x-0",
+                    )}
+                  />
+                </span>
+              ) : null}
             </li>
           );
         })}

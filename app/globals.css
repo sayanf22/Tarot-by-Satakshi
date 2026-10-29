@@ -299,6 +299,70 @@
 
 .spin-slow {
   animation: spin-slow 70s linear infinite;
+  will-change: rotate;
+}
+
+/* Mobile menu (a modal <dialog>): fades and drops in on open, fades out on close.
+   @starting-style gives the "before" state for the opening transition; allow-discrete
+   keeps the dialog on screen until the closing transition ends. Links follow in turn. */
+.menu-dialog {
+  opacity: 0;
+  translate: 0 -10px;
+  transition:
+    opacity 0.35s var(--ease-soft),
+    translate 0.45s var(--ease-soft),
+    overlay 0.35s allow-discrete,
+    display 0.35s allow-discrete;
+}
+
+.menu-dialog[open] {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.menu-dialog::backdrop {
+  background-color: rgb(30 26 20 / 0);
+  transition:
+    background-color 0.35s,
+    overlay 0.35s allow-discrete,
+    display 0.35s allow-discrete;
+}
+
+.menu-dialog[open]::backdrop {
+  background-color: rgb(30 26 20 / 0.3);
+}
+
+.menu-dialog .menu-item {
+  opacity: 0;
+  translate: 0 14px;
+  transition:
+    opacity 0.3s var(--ease-soft),
+    translate 0.3s var(--ease-soft);
+}
+
+.menu-dialog[open] .menu-item {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity 0.6s var(--ease-soft),
+    translate 0.6s var(--ease-soft);
+  transition-delay: calc(var(--i, 0) * 55ms + 120ms);
+}
+
+@starting-style {
+  .menu-dialog[open] {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+
+  .menu-dialog[open]::backdrop {
+    background-color: rgb(30 26 20 / 0);
+  }
+
+  .menu-dialog[open] .menu-item {
+    opacity: 0;
+    translate: 0 14px;
+  }
 }
 
 @keyframes grow-y {

@@ -30,3 +30,9 @@ export const formatLabels: Record<SessionFormat, string> = {
   call: "Call",
   text: "Text",
 };
+
+/** ["call", "text"] → "Call or text session". */
+export function sessionLabel(formats: readonly SessionFormat[]) {
+  const words = formats.map((f) => formatLabels[f].toLowerCase()).join(" or ");
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} session`;
+}

@@ -13,7 +13,9 @@ export function BookingCta({ title = "Ready when you are." }: { title?: string }
       <Container>
         <Reveal className="relative overflow-hidden rounded-[40px] bg-ivory px-6 py-16 text-center ring-1 ring-line sm:px-12 lg:py-20">
           <Particles count={16} seed={21} />
-          <Mandala className="spin-slow pointer-events-none absolute top-1/2 left-1/2 w-[30rem] max-w-[120%] -translate-1/2 text-gold-500/35" />
+          {/* Two mandalas in opposite corners, so neither centre sits behind the text. */}
+          <Mandala className="spin-slow pointer-events-none absolute -top-44 -left-44 w-[26rem] text-gold-500/35" />
+          <Mandala className="spin-slow pointer-events-none absolute -right-44 -bottom-44 w-[26rem] text-gold-500/35" />
           <div className="relative">
             <h2 className="text-[2rem] sm:text-5xl">
               <SplitWords text={title} />

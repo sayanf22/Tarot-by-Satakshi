@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CalendarCheck, Clock, PhoneCall } from "lucide-react";
+import { Mandala } from "@/components/art/mandala";
 import { Photo } from "@/components/media/photo";
 import { Reveal } from "@/components/motion/reveal";
 import { SplitWords } from "@/components/motion/split-words";
@@ -7,6 +8,7 @@ import { BookingCta } from "@/components/sections/booking-cta";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Ornament } from "@/components/ui/ornament";
+import { cn } from "@/lib/cn";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -63,20 +65,41 @@ export default function AboutPage() {
 
       <section aria-label="How sessions work" className="py-12 lg:py-16">
         <Container>
-          <ul className="grid gap-4 sm:grid-cols-3">
-            {facts.map(({ icon: Icon, title, text }, i) => (
-              <li key={title}>
-                <Reveal delay={i * 90} className="h-full">
-                  <div className="h-full rounded-3xl p-7 ring-1 ring-line">
-                    <span className="flex size-12 items-center justify-center rounded-2xl bg-ivory">
-                      <Icon className="size-5 text-gold-700" strokeWidth={1.6} aria-hidden="true" />
-                    </span>
-                    <h2 className="mt-6 text-2xl">{title}</h2>
-                    <p className="mt-2 text-ink-muted">{text}</p>
-                  </div>
-                </Reveal>
-              </li>
-            ))}
+          <ul className="grid gap-5 sm:grid-cols-3">
+            {facts.map(({ icon: Icon, title, text }, i) => {
+              const dark = i === 1;
+              return (
+                <li key={title}>
+                  <Reveal delay={i * 90} className="h-full">
+                    <div
+                      className={cn(
+                        "group relative h-full overflow-hidden rounded-[28px] p-7 transition duration-500 ease-soft hover:-translate-y-2 hover:shadow-lift",
+                        dark ? "grain-dark bg-night text-white" : "bg-white ring-1 ring-gold-500/60",
+                      )}
+                    >
+                      <Mandala
+                        className={cn(
+                          "pointer-events-none absolute -top-16 -right-16 size-48 transition-[rotate] duration-[1400ms] ease-soft group-hover:rotate-45",
+                          dark ? "text-gold-500/25" : "text-gold-500/30",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "relative flex size-16 items-center justify-center rounded-full ring-1 transition-transform duration-500 ease-soft group-hover:scale-105",
+                          dark
+                            ? "bg-night-700 text-gold-300 ring-gold-500/50"
+                            : "bg-champagne text-gold-800 ring-gold-500/40",
+                        )}
+                      >
+                        <Icon className="size-7" strokeWidth={1.6} aria-hidden="true" />
+                      </span>
+                      <h2 className={cn("relative mt-7 text-2xl", dark && "text-white")}>{title}</h2>
+                      <p className={cn("relative mt-2", dark ? "text-mist" : "text-ink-muted")}>{text}</p>
+                    </div>
+                  </Reveal>
+                </li>
+              );
+            })}
           </ul>
         </Container>
       </section>
