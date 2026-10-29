@@ -1,0 +1,110 @@
+{
+  "moon": {
+    "name": "The Moon",
+    "numeral": "XVIII",
+    "width": 560,
+    "height": 967,
+    "sources": [
+      {
+        "src": "/images/tarot/moon-280.webp",
+        "width": 280
+      },
+      {
+        "src": "/images/tarot/moon-560.webp",
+        "width": 560
+      }
+    ],
+    "source": "https://commons.wikimedia.org/wiki/File:RWS_Tarot_18_Moon.jpg",
+    "licence": "Public domain"
+  },
+  "priestess": {
+    "name": "The High Priestess",
+    "numeral": "II",
+    "width": 560,
+    "height": 962,
+    "sources": [
+      {
+        "src": "/images/tarot/priestess-280.webp",
+        "width": 280
+      },
+      {
+        "src": "/images/tarot/priestess-560.webp",
+        "width": 560
+      }
+    ],
+    "source": "https://commons.wikimedia.org/wiki/File:RWS_Tarot_02_High_Priestess.jpg",
+    "licence": "Public domain"
+  },
+  "two-cups": {
+    "name": "Two of Cups",
+    "numeral": "",
+    "width": 560,
+    "height": 970,
+    "sources": [
+      {
+        "src": "/images/tarot/two-cups-280.webp",
+        "width": 280
+      },
+      {
+        "src": "/images/tarot/two-cups-560.webp",
+        "width": 560
+      }
+    ],
+    "source": "https://commons.wikimedia.org/wiki/File:Cups02.jpg",
+    "licence": "Public domain"
+  },
+  "ace-pentacles": {
+    "name": "Ace of Pentacles",
+    "numeral": "",
+    "width": 560,
+    "height": 970,
+    "sources": [
+      {
+        "src": "/images/tarot/ace-pentacles-280.webp",
+        "width": 280
+      },
+      {
+        "src": "/images/tarot/ace-pentacles-560.webp",
+        "width": 560
+      }
+    ],
+    "source": "https://commons.wikimedia.org/wiki/File:Pents01.jpg",
+    "licence": "Public domain"
+  },
+  "wheel": {
+    "name": "Wheel of Fortune",
+    "numeral": "X",
+    "width": 560,
+    "height": 974,
+    "sources": [
+      {
+        "src": "/images/tarot/wheel-280.webp",
+        "width": 280
+      },
+      {
+        "src": "/images/tarot/wheel-560.webp",
+        "width": 560
+      }
+    ],
+    "source": "https://commons.wikimedia.org/wiki/File:RWS_Tarot_10_Wheel_of_Fortune.jpg",
+    "licence": "Public domain"
+  },
+  "hermit": {
+    "name": "The Hermit",
+    "numeral": "IX",
+    "width": 560,
+    "height": 957,
+    "sources": [
+      {
+        "src": "/images/tarot/hermit-280.webp",
+        "width": 280
+      },
+      {
+        "src": "/images/tarot/hermit-560.webp",
+        "width": 560
+      }
+    ],
+    "source": "https://commons.wikimedia.org/wiki/File:RWS_Tarot_09_Hermit.jpg",
+    "licence": "Public domain"
+  }
+}

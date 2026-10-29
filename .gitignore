@@ -1,0 +1,38 @@
+# Client-private files: never commit (contract, quotation, original photos).
+*.pdf
+docs/agreement.txt
+docs/quotation.txt
+image/
+
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+next-env.d.ts
+
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# Environment and secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Tests and review screenshots
+.screenshots/
+coverage/
+playwright-report/
+test-results/
+
+# Logs and OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo

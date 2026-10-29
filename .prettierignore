@@ -1,0 +1,9 @@
+node_modules
+.next
+out
+.wrangler
+.screenshots
+package-lock.json
+docs
+worker/worker-configuration.d.ts
+*.pdf

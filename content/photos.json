@@ -1,0 +1,40 @@
+{
+  "portrait": {
+    "alt": "Satakshi Kapoor smiling, in a white collared top",
+    "width": 1816,
+    "height": 2903,
+    "sources": [
+      {
+        "src": "/images/satakshi-portrait-480.webp",
+        "width": 480
+      },
+      {
+        "src": "/images/satakshi-portrait-800.webp",
+        "width": 800
+      },
+      {
+        "src": "/images/satakshi-portrait-1200.webp",
+        "width": 1200
+      }
+    ]
+  },
+  "terrace": {
+    "alt": "Satakshi Kapoor seated on a terrace with hills behind her",
+    "width": 3024,
+    "height": 3709,
+    "sources": [
+      {
+        "src": "/images/satakshi-terrace-480.webp",
+        "width": 480
+      },
+      {
+        "src": "/images/satakshi-terrace-800.webp",
+        "width": 800
+      },
+      {
+        "src": "/images/satakshi-terrace-1200.webp",
+        "width": 1200
+      }
+    ]
+  }
+}
