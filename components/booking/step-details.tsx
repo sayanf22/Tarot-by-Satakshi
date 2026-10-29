@@ -105,7 +105,7 @@ export function StepDetails({ needsBirthDetails, initial, onBack, onSubmit }: Pr
                 <span
                   className={cn(
                     "inline-flex rounded-full border border-line bg-white px-4 py-2 text-sm font-medium text-ink transition-colors",
-                    "peer-checked:border-gold-700 peer-checked:bg-champagne peer-checked:text-gold-800 hover:border-gold-500",
+                    "peer-checked:border-gold-600 peer-checked:bg-champagne peer-checked:text-gold-800 hover:border-gold-500",
                     "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-gold-700",
                   )}
                 >

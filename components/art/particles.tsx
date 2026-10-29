@@ -39,7 +39,7 @@ export function Particles({ count = 28, seed = 7, className }: Props) {
           key={d.i}
           className={cn(
             "particle absolute rounded-full bg-gold-500",
-            d.glow && "shadow-[0_0_10px_2px_rgb(198_161_91/0.45)]",
+            d.glow && "shadow-[0_0_10px_2px_rgb(226_185_85/0.55)]",
           )}
           style={
             {

@@ -7,13 +7,15 @@ type Size = "md" | "sm";
 
 type StyleProps = { variant?: Variant; size?: Size };
 
+// Primary is polished gold foil with ink text (6.2:1 at the foil's darkest point).
+// On hover the shine slides across and the glow grows.
 const variants: Record<Variant, string> = {
   primary:
-    "bg-gold-700 text-white shadow-[0_12px_28px_-12px_rgb(110_82_32/0.75)] hover:bg-gold-800 hover:shadow-[0_16px_34px_-12px_rgb(110_82_32/0.85)] disabled:bg-line disabled:text-ink-muted disabled:shadow-none",
+    "bg-gold-foil text-ink shadow-gold ring-1 ring-gold-600/40 ring-inset hover:bg-[position:100%_50%] hover:shadow-gold-lift disabled:bg-line disabled:bg-none disabled:text-ink-muted disabled:shadow-none disabled:ring-0",
   outline:
-    "border border-gold-700/70 bg-white text-gold-800 hover:border-gold-700 hover:bg-ivory disabled:border-line disabled:text-ink-muted",
+    "border border-gold-500 bg-white text-gold-800 hover:border-gold-600 hover:bg-champagne disabled:border-line disabled:text-ink-muted",
   light: "bg-white text-ink hover:bg-champagne",
-  "ghost-light": "border border-white/30 text-white hover:border-white hover:bg-white/10",
+  "ghost-light": "border border-gold-300/50 text-white hover:border-gold-300 hover:bg-white/10",
 };
 
 const sizes: Record<Size, string> = {
@@ -23,7 +25,7 @@ const sizes: Record<Size, string> = {
 
 export function buttonClasses({ variant = "primary", size = "md" }: StyleProps = {}, className?: string) {
   return cn(
-    "inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap transition-all duration-300 ease-soft hover:-translate-y-px active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0",
+    "inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-bold whitespace-nowrap transition-all duration-500 ease-soft hover:-translate-y-px active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0",
     variants[variant],
     sizes[size],
     className,

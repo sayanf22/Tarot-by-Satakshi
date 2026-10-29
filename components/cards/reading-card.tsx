@@ -77,7 +77,7 @@ function ReadingBack({
         <Link
           ref={bookRef}
           href={`/book?service=${service.slug}`}
-          className="group mt-[4.5cqw] inline-flex h-[max(2.5rem,14cqw)] items-center gap-2 rounded-full bg-gold-700 px-[6cqw] text-[max(0.85rem,4.8cqw)] font-semibold whitespace-nowrap text-white transition-colors duration-300 hover:bg-gold-300 hover:text-ink"
+          className="group mt-[4.5cqw] inline-flex h-[max(2.5rem,14cqw)] items-center gap-2 rounded-full bg-gold-foil px-[6cqw] text-[max(0.85rem,4.8cqw)] font-bold whitespace-nowrap text-ink shadow-gold transition-all duration-500 ease-soft hover:bg-[position:100%_50%] hover:shadow-gold-lift"
         >
           Book this reading
           <ArrowRight

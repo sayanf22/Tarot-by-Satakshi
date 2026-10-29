@@ -94,18 +94,29 @@ At 2 emails per booking, Resend's daily cap covers about 45 bookings and their e
 
 | Token | Hex | Use | Contrast |
 |---|---|---|---|
-| `white` | #FFFFFF | Main background | – |
-| `ivory` | #FAF6EE | Alternate sections, mobile menu | – |
-| `champagne` | #F3EAD7 | Selected time slot, card hover | Text on it uses `ink` or `gold-800` (6.1:1) |
-| `gold-300` | #E3CD98 | Footer headings on ink | 11.1:1 on ink |
-| `gold-500` | #C6A15B | **Decoration only:** rules, ornaments, icons, borders | 2.4:1, so never used for text |
-| `gold-700` | #8C6A2B | Gold text, links, primary button | 5.0:1 on white, 4.6:1 on ivory (AA) |
-| `gold-800` | #6E5220 | Button hover and pressed, gold text on champagne | 7.3:1 with white |
-| `ink` | #1E1A14 | Headings and body text, footer background | 17.3:1 on white |
-| `ink-muted` | #5A5145 | Secondary text | 7.8:1 on white |
-| `line` | #E9DFCB | Hairline borders | – |
+A warm, saturated gold (hue 40–44°). Tokens 200–600 are the metal itself and carry ink text, never white. Tokens 700–800 are for gold text on light backgrounds.
 
-All contrast values were calculated with the WCAG formula. Text never uses gradients, fades or transparency. A gold gradient (#C6A15B → #E3CD98 → #B08A45) appears only on ornaments and rules.
+| Token | Hex | Use | Contrast |
+|---|---|---|---|
+| `white` | #FFFFFF | Main background | – |
+| `ivory` | #FDF9F0 | Softest panels, page intros | – |
+| `champagne` | #F7EDD3 | Icon tiles, selected states | `gold-800` text on it: 6.2:1 |
+| `gold-200` | #F3DC9C | Foil highlight | Ink on it: 12.8:1 |
+| `gold-300` | #ECCF85 | Gold text on dark surfaces | 12.8:1 on black, 12.1:1 on night |
+| `gold-400` | #E2B955 | Foil body | – |
+| `gold-500` | #D4A542 | **Decoration only:** lines, rings, particles, line art | 2.3:1, so never used for text |
+| `gold-600` | #C4922C | Foil shadow, selected borders | Ink on it: 6.2:1 (the foil's darkest point) |
+| `gold-700` | #8F6514 | Gold text, links, card line art | 5.2:1 on white, 4.9:1 on ivory |
+| `gold-800` | #73500E | Deep gold text | 7.3:1 on white |
+| `ink` | #1E1A14 | Headings and body text | 17.3:1 on white |
+| `ink-muted` | #5A5145 | Secondary text | 7.8:1 on white |
+| `line` | #EFE3C9 | Hairline borders | – |
+| `night` / `black` | #17140F / #0F0D0A | Dark card faces / footer | – |
+
+All contrast values were calculated with the WCAG formula. Two gold utilities in `app/globals.css`:
+
+- **`bg-gold-foil`:** a 115° gradient 200 → 400 → 600 → 400 → 200 at double width. On hover the shine slides across (`hover:bg-[position:100%_50%]`). Used for primary buttons, the word ribbon, the active booking step, the selected date and open FAQ toggles, always with ink text, plus `shadow-gold` (a light top edge and a warm glow).
+- **`text-gold-foil`:** gradient lettering for large accent words only, `gold-800` → #A87A1C → `gold-700` → `gold-800`. Its lightest stop is 3.8:1 on white, which passes for large text. Falls back to solid `gold-700`.
 
 ### Fonts: one pair, no italics or thin weights
 
@@ -128,7 +139,7 @@ All contrast values were calculated with the WCAG formula. Text never uses gradi
 - **Photo frames** take the photo's own shape, so nothing is cropped.
 - **Motion:** words rise in, blocks fade up on scroll, the FAQ accordion eases open (grid rows 0fr → 1fr), the mobile menu fades in with staggered links. All of it is turned off for visitors who prefer reduced motion. Only transform and opacity animate.
 - **Contact in short form:** the FAQ, mobile menu and footer show Call, Email and Message buttons with icons, not the raw number. The Contact page still lists the number and email in full.
-- **Buttons:** pill-shaped, solid `gold-700` with white text, or a `gold-700` outline.
+- **Buttons:** pill-shaped. Primary is gold foil with ink text; outline is a `gold-500` border with `gold-800` text that fills champagne on hover.
 - **Layout:** 1200 px maximum content width.
 
 **Assets needed from Satakshi:** logo (or approval of the text wordmark), more photos, testimonials, and her real services with prices and durations.
@@ -365,6 +376,7 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 | 1 Design system | **Done** | Tokens in `app/globals.css`, Marcellus + Manrope, buttons, ornaments, line-art icons, tarot cards |
 | 2b Design refresh | **Done** | Playfair Display headings (as on the reference site, upright only), white background, rounded panels and cards, black footer, word-by-word heading animation, scroll reveals, Lenis smooth scrolling, longer home page (topics, call or text, what to have ready, four steps, FAQ) |
 | 2d White-and-gold refresh | **Done** | EB Garamond headings and Figtree body (the reference pairing, Medium and up, no italics); gold particles instead of stars; one word ribbon; hero card on a turning mandala; readings as a one-at-a-time slider with real Rider–Waite–Smith cards (1909, public domain, from Wikimedia Commons via `scripts/fetch-tarot-cards.mjs`; nude figures excluded); cards turn on hover or tap |
+| 2e Polished gold | **Done** | Greyish olive gold replaced with a warm gold scale (200–800); foil buttons, ribbon, steps, date picker and FAQ toggles with ink text; foil lettering on accent words; card line art regenerated in `gold-700`; favicon updated |
 | 2c Home redesign | **Done** | Hero of four tarot cards dealt from the centre that turn face up (tap to turn again); crossing word ribbons; "Meet Satakshi" with her two photos and a turning badge; readings as a fanned deck of flip cards; topics as a line of words; drawn four-step timeline; one black session panel; open FAQ list. Photos: originals in `image/` (not deployed), web versions made by `node scripts/process-photos.mjs` (watermark strip cropped, metadata removed, 480/800/1200 px WebP) |
 | 2 Public pages (sample data) | **Done** | Home, About, Services (with FAQ), Book (4 steps, Pay disabled), `/book/status`, Contact, 404. Legal pages wait for policy text; sitemap and share image wait for the domain |
 | 3 Admin UI (mock data) | | All admin screens |

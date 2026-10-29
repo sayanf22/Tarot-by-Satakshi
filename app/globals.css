@@ -4,22 +4,30 @@
 /* ------------------------------------------------------------------
    Design tokens. Primary: white. Secondary: gold. Dark cards and footer: warm black.
    The default Tailwind palette is removed so only these colours exist.
-   Contrast (WCAG, measured): ink 17.3:1, ink-muted 7.8:1, gold-700 5.0:1 on white,
-   white on gold-700 5.0:1. On black: white 18:1, mist 14:1, gold-300 11:1.
-   gold-500 is 2.4:1 on white, so it is for lines, art and particles only, never text.
+
+   Gold is a warm, saturated scale (hue 40–44°), not the greyish olive it replaced.
+   - 200–600 are the metal itself: the foil gradient on buttons and filled accents,
+     lines, rings and particles. They carry ink text, never white.
+   - 700–800 are gold for text on light backgrounds.
+   Contrast (WCAG, measured): ink 17.3:1 and ink-muted 7.4:1 on ivory; gold-700 5.2:1 and
+   gold-800 7.3:1 on white; ink on the foil 6.2:1 at its darkest point. On black: white 18:1,
+   mist 14:1, gold-300 12.8:1. gold-500 is 2.3:1 on white: lines and art only, never text.
    ------------------------------------------------------------------ */
 @theme {
   --color-*: initial;
   --color-white: #ffffff;
-  --color-ivory: #fbf8f1; /* softest warm tint for panels */
-  --color-champagne: #f3ead7; /* tiles, selected states */
-  --color-gold-300: #e3cd98;
-  --color-gold-500: #c6a15b;
-  --color-gold-700: #8c6a2b;
-  --color-gold-800: #6e5220;
+  --color-ivory: #fdf9f0; /* softest warm tint for panels */
+  --color-champagne: #f7edd3; /* tiles, selected states */
+  --color-gold-200: #f3dc9c; /* foil highlight */
+  --color-gold-300: #eccf85; /* gold on dark surfaces */
+  --color-gold-400: #e2b955; /* foil body */
+  --color-gold-500: #d4a542; /* lines, rings, particles */
+  --color-gold-600: #c4922c; /* foil shadow, deepest metal */
+  --color-gold-700: #8f6514; /* gold text on light */
+  --color-gold-800: #73500e; /* deep gold text */
   --color-ink: #1e1a14;
   --color-ink-muted: #5a5145;
-  --color-line: #ece4d3;
+  --color-line: #efe3c9;
   --color-night: #17140f; /* dark card faces */
   --color-night-700: #2a241a;
   --color-black: #0f0d0a; /* footer */
@@ -28,8 +36,15 @@
 
   --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
 
-  --shadow-soft: 0 1px 2px rgb(30 26 20 / 0.04), 0 14px 30px -18px rgb(110 82 32 / 0.3);
-  --shadow-lift: 0 2px 6px rgb(30 26 20 / 0.05), 0 24px 44px -24px rgb(110 82 32 / 0.42);
+  --shadow-soft: 0 1px 2px rgb(30 26 20 / 0.04), 0 14px 30px -18px rgb(143 101 20 / 0.32);
+  --shadow-lift: 0 2px 6px rgb(30 26 20 / 0.05), 0 24px 44px -24px rgb(143 101 20 / 0.45);
+  /* Gold buttons: a thin light edge on top and a warm glow underneath. */
+  --shadow-gold:
+    inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 -1px 0 rgb(115 80 14 / 0.25),
+    0 12px 26px -12px rgb(196 146 44 / 0.75);
+  --shadow-gold-lift:
+    inset 0 1px 0 rgb(255 255 255 / 0.6), inset 0 -1px 0 rgb(115 80 14 / 0.25),
+    0 18px 34px -14px rgb(196 146 44 / 0.85);
 
   --animate-rise: rise 0.9s var(--ease-soft) both;
   --animate-float: float 7s ease-in-out infinite;
@@ -120,6 +135,41 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+}
+
+/* Polished gold: light, body, deep, body, light. The background is twice as wide as
+   the element, so moving it (on hover) slides the shine across like light on metal. */
+@utility bg-gold-foil {
+  background-color: var(--color-gold-400);
+  background-image: linear-gradient(
+    115deg,
+    var(--color-gold-200) 0%,
+    var(--color-gold-400) 26%,
+    var(--color-gold-600) 50%,
+    var(--color-gold-400) 74%,
+    var(--color-gold-200) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+}
+
+/* Gold lettering for large display words on light backgrounds. Every stop is at
+   least 3.8:1 on white, which passes for large text. Plain gold-700 where the
+   browser can't clip a background to text. */
+@utility text-gold-foil {
+  color: var(--color-gold-700);
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    background-image: linear-gradient(
+      100deg,
+      var(--color-gold-800) 0%,
+      #a87a1c 45%,
+      var(--color-gold-700) 72%,
+      var(--color-gold-800) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 }
 
@@ -498,9 +548,16 @@
 }
 
 .rdp-root .rdp-selected .rdp-day_button {
-  background-color: var(--color-gold-700);
-  color: var(--color-white);
-  font-weight: 600;
+  background-color: var(--color-gold-400);
+  background-image: linear-gradient(
+    135deg,
+    var(--color-gold-200),
+    var(--color-gold-400) 45%,
+    var(--color-gold-600)
+  );
+  box-shadow: var(--shadow-gold);
+  color: var(--color-ink);
+  font-weight: 700;
 }
 
 .rdp-root .rdp-disabled .rdp-day_button {

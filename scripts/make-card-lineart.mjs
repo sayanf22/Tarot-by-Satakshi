@@ -7,7 +7,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import sharp from "sharp";
 
-const GOLD = [0x6e, 0x52, 0x20]; // gold-800
+const GOLD = [0x8f, 0x65, 0x14]; // gold-700 (#8f6514)
 const OUT_WIDTH = 480;
 // Inside the card frame: skips the white border, the numeral at the top (the site shows
 // icons, not numbers) and the title band at the bottom.

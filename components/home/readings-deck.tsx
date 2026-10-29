@@ -44,7 +44,7 @@ function RoundArrow({ dir, onClick }: { dir: "prev" | "next"; onClick: (at: numb
       type="button"
       onClick={(e) => onClick(e.timeStamp)}
       aria-label={dir === "prev" ? "Previous reading" : "Next reading"}
-      className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white text-gold-800 shadow-soft ring-1 ring-gold-500/50 transition duration-300 ease-soft hover:-translate-y-0.5 hover:bg-gold-700 hover:text-white hover:ring-gold-700"
+      className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white text-gold-800 shadow-soft ring-1 ring-gold-500 transition duration-300 ease-soft hover:-translate-y-0.5 hover:bg-gold-foil hover:text-ink hover:shadow-gold hover:ring-gold-600"
     >
       <Icon className="size-[1.1rem]" aria-hidden="true" />
     </button>
@@ -241,7 +241,7 @@ export function ReadingsDeck({ services }: { services: readonly Service[] }) {
               <span
                 className={cn(
                   "block h-2 rounded-full transition-all duration-500 ease-soft",
-                  i === index ? "w-8 bg-gold-700" : "w-2 bg-gold-500 group-hover:bg-gold-700",
+                  i === index ? "w-8 bg-gold-foil shadow-gold" : "w-2 bg-gold-500 group-hover:bg-gold-600",
                 )}
               />
             </button>

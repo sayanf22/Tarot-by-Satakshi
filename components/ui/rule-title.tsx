@@ -11,7 +11,7 @@ function Rule({ side }: { side: "left" | "right" }) {
       aria-hidden="true"
       fill="none"
       className={cn(
-        "draw-x hidden h-6 w-24 shrink-0 text-gold-700 sm:block lg:w-40",
+        "draw-x hidden h-6 w-24 shrink-0 text-gold-600 sm:block lg:w-40",
         left ? "origin-right" : "origin-left",
       )}
     >

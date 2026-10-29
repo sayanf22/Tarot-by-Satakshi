@@ -38,7 +38,7 @@ export function FaqList({ firstOpen = true }: { firstOpen?: boolean }) {
                   className={cn(
                     "flex size-10 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,color,rotate] duration-500 ease-soft",
                     isOpen
-                      ? "rotate-45 border-gold-700 bg-gold-700 text-white"
+                      ? "rotate-45 border-gold-600 bg-gold-foil text-ink shadow-gold"
                       : "border-line text-ink group-hover:border-gold-500",
                   )}
                 >

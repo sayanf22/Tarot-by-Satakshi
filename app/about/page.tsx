@@ -187,7 +187,7 @@ export default function AboutPage() {
                         See readings
                         <span
                           aria-hidden="true"
-                          className="absolute -bottom-1 left-0 h-px w-full origin-left scale-x-0 bg-gold-700 transition-transform duration-500 ease-soft group-hover/link:scale-x-100"
+                          className="absolute -bottom-1 left-0 h-px w-full origin-left scale-x-0 bg-gold-600 transition-transform duration-500 ease-soft group-hover/link:scale-x-100"
                         />
                       </span>
                       <ArrowRight

@@ -15,7 +15,7 @@ export const optionClasses =
   "relative flex cursor-pointer rounded-2xl border bg-white transition-colors duration-300 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-gold-700";
 
 export function optionState(selected: boolean) {
-  return selected ? "border-gold-700 bg-ivory ring-1 ring-gold-700" : "border-line hover:border-gold-500";
+  return selected ? "border-gold-600 bg-ivory ring-1 ring-gold-600" : "border-line hover:border-gold-500";
 }
 
 type Props = {

@@ -133,11 +133,11 @@ export function HeroFan() {
       {/* Backdrop, back to front: warm glow, slow rays, orbit rings. Clipped by the hero. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -inset-[30%] rounded-full bg-[radial-gradient(circle,var(--color-champagne)_0%,rgb(243_234_215/0.55)_30%,transparent_62%)]"
+        className="pointer-events-none absolute -inset-[30%] rounded-full bg-[radial-gradient(circle,var(--color-champagne)_0%,rgb(247_237_211/0.55)_30%,transparent_62%)]"
       />
       <div
         aria-hidden="true"
-        className="spin-slow pointer-events-none absolute -inset-[45%] rounded-full [mask-image:radial-gradient(circle,black_18%,transparent_62%)] [animation-direction:reverse] [animation-duration:220s] [background:repeating-conic-gradient(from_0deg,rgb(198_161_91/0.16)_0deg_1.2deg,transparent_1.2deg_9deg)]"
+        className="spin-slow pointer-events-none absolute -inset-[45%] rounded-full [mask-image:radial-gradient(circle,black_18%,transparent_62%)] [animation-direction:reverse] [animation-duration:220s] [background:repeating-conic-gradient(from_0deg,rgb(212_165_66/0.18)_0deg_1.2deg,transparent_1.2deg_9deg)]"
       />
       <div
         aria-hidden="true"

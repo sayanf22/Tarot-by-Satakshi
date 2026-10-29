@@ -19,8 +19,8 @@ export function SessionChoice() {
               icon="moon"
               className="absolute -top-6 -right-6 size-40 text-gold-500/30 transition-transform duration-700 ease-soft group-hover:rotate-[24deg]"
             />
-            <span className="relative flex size-14 items-center justify-center rounded-2xl bg-gold-700">
-              <PhoneCall className="size-6 text-white" strokeWidth={1.75} aria-hidden="true" />
+            <span className="relative flex size-14 items-center justify-center rounded-2xl bg-gold-foil shadow-gold">
+              <PhoneCall className="size-6 text-ink" strokeWidth={1.75} aria-hidden="true" />
             </span>
             <h3 className="relative mt-8 text-2xl text-white">Call session</h3>
             <p className="relative mt-2 text-mist">Talk it through with {site.firstName} on a phone call.</p>

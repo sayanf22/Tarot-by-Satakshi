@@ -57,13 +57,13 @@ export default function HomePage() {
         {/* Soft warm light from the top left, behind the words. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-40 -left-40 size-[42rem] rounded-full bg-[radial-gradient(circle,rgb(243_234_215/0.7),transparent_65%)]"
+          className="pointer-events-none absolute -top-40 -left-40 size-[42rem] rounded-full bg-[radial-gradient(circle,rgb(247_237_211/0.75),transparent_65%)]"
         />
         <Particles count={40} seed={5} />
         <Container className="relative grid items-center gap-8 pt-8 pb-16 lg:min-h-[min(calc(100svh-5rem),800px)] lg:grid-cols-[1fr_1fr] lg:gap-4 lg:py-10">
           <div className="relative text-center lg:text-left">
             <p className="inline-flex animate-rise items-center gap-2.5 rounded-full bg-white py-1.5 pr-4 pl-1.5 text-sm font-semibold text-ink shadow-soft ring-1 ring-gold-500/50">
-              <span className="flex size-7 items-center justify-center rounded-full bg-gold-700 text-white">
+              <span className="flex size-7 items-center justify-center rounded-full bg-gold-foil text-ink shadow-gold">
                 <Layers className="size-3.5" strokeWidth={2} aria-hidden="true" />
               </span>
               With {site.owner}
