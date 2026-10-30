@@ -23,7 +23,7 @@ export function Particles({ count = 28, seed = 7, className }: Props) {
     i,
     x: rand() * 100,
     y: 20 + rand() * 80,
-    size: 2 + rand() * 3.5,
+    size: 4 + rand() * 3,
     o: 0.45 + rand() * 0.45,
     dx: (rand() - 0.5) * 40,
     dy: -(70 + rand() * 90),
@@ -38,15 +38,21 @@ export function Particles({ count = 28, seed = 7, className }: Props) {
         <span
           key={d.i}
           className={cn(
-            "particle absolute rounded-full bg-gold-500",
-            d.glow && "shadow-[0_0_10px_2px_rgb(226_185_85/0.55)]",
+            // A radial gradient gives every dot a soft round edge at any size or
+            // screen density, and costs less to animate than a box-shadow glow.
+            "particle absolute rounded-full",
+            d.glow
+              ? "bg-[radial-gradient(circle_closest-side,var(--color-gold-400)_0_24%,rgb(226_185_85/0.4)_50%,transparent)]"
+              : "bg-[radial-gradient(circle_closest-side,var(--color-gold-500)_0_50%,transparent)]",
+            // Half as many on phones, so small screens stay calm.
+            d.i % 2 === 1 && "max-sm:hidden",
           )}
           style={
             {
               left: `${d.x}%`,
               top: `${d.y}%`,
-              width: d.size,
-              height: d.size,
+              width: d.glow ? d.size * 2 : d.size,
+              height: d.glow ? d.size * 2 : d.size,
               "--p-o": d.o,
               "--p-x": `${d.dx}px`,
               "--p-y": `${d.dy}px`,

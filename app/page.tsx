@@ -41,17 +41,23 @@ const steps: ReadonlyArray<{ title: string; text: string; icon: LucideIcon }> = 
   { title: "Get confirmed", text: `By email. Then ${site.firstName} reaches out.`, icon: MailCheck },
 ];
 
-const heroFacts: ReadonlyArray<{ icon: LucideIcon; label: string }> = [
-  { icon: PhoneCall, label: "Call" },
-  { icon: MessageCircle, label: "Text" },
-  { icon: Clock, label: `${site.hours.daysShort}, ${site.hours.time}` },
+// Phones show `title` over `detail` in a three-column card; wider screens show `label` in a row.
+const heroFacts: ReadonlyArray<{ icon: LucideIcon; label: string; title: string; detail: string }> = [
+  { icon: PhoneCall, label: "Call", title: "Call", detail: "Phone reading" },
+  { icon: MessageCircle, label: "Text", title: "Text", detail: "Chat reading" },
+  {
+    icon: Clock,
+    label: `${site.hours.daysShort}, ${site.hours.time}`,
+    title: site.hours.daysShort,
+    detail: site.hours.time,
+  },
 ];
 
 export default function HomePage() {
   return (
     <>
       {/* Hero: words on the left, three cards fanned on a turning mandala on the right. */}
-      {/* Order on load: badge, title word by word, the line under it word by word,
+      {/* Order on load: title word by word, the line under it word by word,
           then the buttons and the icon row one at a time. */}
       <section className="relative overflow-hidden bg-linear-to-b from-white via-ivory to-white">
         {/* Soft warm light from the top left, behind the words. */}
@@ -60,48 +66,51 @@ export default function HomePage() {
           className="pointer-events-none absolute -top-40 -left-40 size-[42rem] rounded-full bg-[radial-gradient(circle,rgb(247_237_211/0.75),transparent_65%)]"
         />
         <Particles count={40} seed={5} />
-        <Container className="relative grid items-center gap-8 pt-8 pb-16 lg:min-h-[min(calc(100svh-5rem),800px)] lg:grid-cols-[1fr_1fr] lg:gap-4 lg:py-10">
+        <Container className="relative grid items-center gap-6 pt-12 pb-16 sm:pt-14 lg:min-h-[min(calc(100svh-5rem),800px)] lg:grid-cols-[1fr_1fr] lg:gap-4 lg:py-10">
           <div className="relative text-center lg:text-left">
-            <p className="inline-flex animate-rise items-center gap-2.5 rounded-full bg-white py-1.5 pr-4 pl-1.5 text-sm font-semibold text-ink shadow-soft ring-1 ring-gold-500/50">
-              <span className="flex size-7 items-center justify-center rounded-full bg-gold-foil text-ink shadow-gold">
-                <Layers className="size-3.5" strokeWidth={2} aria-hidden="true" />
-              </span>
-              With {site.owner}
-            </p>
-            <h1 className="hero-words mt-6 text-[3.2rem] leading-[1.02] sm:text-[4.5rem] lg:text-[5.3rem]">
+            <h1 className="hero-words text-[3.4rem] leading-[1.02] sm:text-[4.5rem] lg:text-[5.3rem]">
               <SplitWords text="Clarity," accent={[0]} />
               <br />
               <SplitWords text="one card" start={1} />
               <br />
               <SplitWords text="at a time." start={3} />
             </h1>
-            <p className="hero-sub mx-auto mt-6 max-w-md text-lg text-ink-muted [--sub-start:900ms] sm:text-xl lg:mx-0">
+            <p className="hero-sub mx-auto mt-5 max-w-[22rem] text-[1.08rem] leading-relaxed text-balance text-ink-muted [--sub-start:900ms] sm:mt-6 sm:max-w-md sm:text-xl lg:mx-0">
               <SplitWords text="Personal tarot and astrology readings, on a call or over text." />
             </p>
-            <div className="mt-9 flex flex-wrap justify-center gap-4 lg:justify-start">
-              <ButtonLink href="/book" className="animate-rise [animation-delay:1500ms]">
+            {/* Phones: two full-width buttons of equal size, stacked. Wider: side by side. */}
+            <div className="mx-auto mt-8 grid w-full max-w-[22rem] gap-3 sm:mt-9 sm:flex sm:max-w-none sm:flex-wrap sm:justify-center sm:gap-4 lg:justify-start">
+              <ButtonLink
+                href="/book"
+                className="h-13 w-full animate-rise [animation-delay:1500ms] sm:h-12 sm:w-auto"
+              >
                 Book a session
                 <ArrowRight className="size-4" aria-hidden="true" />
               </ButtonLink>
               <ButtonLink
                 href="#readings"
                 variant="outline"
-                className="animate-rise [animation-delay:1620ms]"
+                className="h-13 w-full animate-rise [animation-delay:1620ms] sm:h-12 sm:w-auto"
               >
                 Explore readings
               </ButtonLink>
             </div>
-            <ul className="mt-10 flex flex-wrap justify-center gap-x-6 gap-y-3 text-[0.95rem] font-semibold text-ink lg:justify-start">
-              {heroFacts.map(({ icon: Icon, label }, i) => (
+            {/* Phones: one tidy three-column card. Wider: a light row of icon and label. */}
+            <ul className="mx-auto mt-8 grid w-full max-w-[22rem] grid-cols-3 divide-x divide-line rounded-[24px] bg-white text-ink shadow-soft ring-1 ring-line sm:mt-10 sm:flex sm:max-w-none sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-3 sm:divide-x-0 sm:rounded-none sm:bg-transparent sm:text-[0.95rem] sm:font-semibold sm:shadow-none sm:ring-0 lg:justify-start">
+              {heroFacts.map(({ icon: Icon, label, title, detail }, i) => (
                 <li
                   key={label}
-                  className="flex animate-rise items-center gap-2"
+                  className="flex animate-rise flex-col items-center gap-2 px-2 py-4 sm:flex-row sm:p-0"
                   style={{ animationDelay: `${1800 + i * 130}ms` }}
                 >
-                  <span className="flex size-8 items-center justify-center rounded-full bg-champagne text-gold-800">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-champagne text-gold-800 sm:size-8">
                     <Icon className="size-4" strokeWidth={1.9} aria-hidden="true" />
                   </span>
-                  {label}
+                  <span className="text-center leading-tight sm:hidden">
+                    <span className="block text-[0.92rem] font-bold">{title}</span>
+                    <span className="mt-0.5 block text-xs font-medium text-ink-muted">{detail}</span>
+                  </span>
+                  <span className="hidden sm:inline">{label}</span>
                 </li>
               ))}
             </ul>
@@ -130,7 +139,7 @@ export default function HomePage() {
       {/* About: a framed portrait and a short introduction (like the reference's "Who are" block). */}
       <section className="py-16 lg:py-24">
         <Container className="grid items-center gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-20">
-          <Reveal className="mx-auto w-full max-w-[400px]">
+          <Reveal className="mx-auto w-full max-w-[300px] sm:max-w-[400px]">
             <div className="group grain-dark relative rounded-[36px] bg-night p-3 shadow-lift">
               <div className="overflow-hidden rounded-[28px]">
                 <Photo
@@ -192,7 +201,7 @@ export default function HomePage() {
                   <Reveal delay={i * 160} className="h-full">
                     <div
                       className={cn(
-                        "group relative h-full overflow-hidden rounded-[28px] p-7 transition duration-500 ease-soft hover:-translate-y-2 hover:shadow-lift",
+                        "group relative h-full overflow-hidden rounded-[28px] p-6 transition duration-500 ease-soft hover:-translate-y-2 hover:shadow-lift sm:p-7",
                         dark ? "grain-dark bg-night text-white" : "bg-white ring-1 ring-gold-500/60",
                       )}
                     >
@@ -206,7 +215,7 @@ export default function HomePage() {
                       <div className="relative flex items-center justify-between">
                         <span
                           className={cn(
-                            "flex size-16 items-center justify-center rounded-full ring-1 transition-transform duration-500 ease-soft group-hover:scale-105",
+                            "flex size-14 items-center justify-center rounded-full ring-1 transition-transform duration-500 ease-soft group-hover:scale-105 sm:size-16",
                             dark
                               ? "bg-night-700 text-gold-300 ring-gold-500/50"
                               : "bg-champagne text-gold-800 ring-gold-500/40",
@@ -224,7 +233,7 @@ export default function HomePage() {
                           {i + 1}
                         </span>
                       </div>
-                      <h3 className={cn("relative mt-7 text-xl", dark && "text-white")}>{s.title}</h3>
+                      <h3 className={cn("relative mt-5 text-xl sm:mt-7", dark && "text-white")}>{s.title}</h3>
                       <p className={cn("relative mt-2", dark ? "text-mist" : "text-ink-muted")}>{s.text}</p>
                     </div>
                   </Reveal>

@@ -1,11 +1,7 @@
 import { cn } from "@/lib/cn";
 
 // Concentric line-art wheel, like the reference's hero mandala. Purely decorative.
-// Strokes use currentColor; the centre and the small markers are gold diamonds.
-
-function diamond(cx: number, cy: number, r: number) {
-  return `M${cx} ${cy - r}L${cx + r} ${cy}L${cx} ${cy + r}L${cx - r} ${cy}Z`;
-}
+// Strokes and the small round markers use currentColor.
 
 // Rounded so the server and the browser print the same numbers (their trig
 // functions can differ in the last digits, which breaks hydration).
@@ -55,11 +51,12 @@ export function Mandala({ className, detailed = true }: { className?: string; de
         strokeLinejoin="round"
         transform="rotate(45 100 100)"
       />
-      <g className="fill-current stroke-none text-gold-500">
-        <path d={diamond(100, 100, 5)} />
+      {/* Round markers in the wheel's own colour, so they fade with it (no bright squares). */}
+      <g className="fill-current stroke-none">
+        <circle cx="100" cy="100" r="3.2" />
         {[0, 90, 180, 270].map((deg) => {
           const [x, y] = polar(96, deg);
-          return <path key={`g${deg}`} d={diamond(x, y, 3.5)} />;
+          return <circle key={`g${deg}`} cx={x} cy={y} r="2.4" />;
         })}
       </g>
     </svg>

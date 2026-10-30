@@ -150,7 +150,8 @@ export function ReadingsDeck({ services }: { services: readonly Service[] }) {
         className={cn(
           "relative mx-auto [touch-action:pan-y] select-none [perspective:1600px]",
           "h-[calc(var(--w)*11/7+1.5rem)] [--s3:calc(var(--s2)+3rem)]",
-          "[--s1:min(80px,21vw)] [--s2:min(96px,25vw)] [--w:min(230px,62vw)]",
+          // Phones: side cards tuck further behind, so only their edge peeks out.
+          "[--s1:min(62px,16vw)] [--s2:min(96px,25vw)] [--w:min(230px,62vw)]",
           "sm:[--s1:160px] sm:[--w:250px] md:[--s2:270px] lg:[--s1:190px] lg:[--s2:330px] lg:[--w:270px]",
         )}
         onPointerDown={onPointerDown}
@@ -176,6 +177,8 @@ export function ReadingsDeck({ services }: { services: readonly Service[] }) {
                 "absolute top-4 left-1/2 w-[var(--w)] transition-[transform,opacity] duration-[850ms] ease-soft will-change-transform",
                 (abs > 2 || jump) && "pointer-events-none opacity-0",
                 abs === 2 && "max-md:pointer-events-none max-md:opacity-0",
+                // On phones the cards behind sit back softly, so their cut-off words don't compete.
+                abs === 1 && !jump && "max-sm:opacity-60",
               )}
               style={
                 {
