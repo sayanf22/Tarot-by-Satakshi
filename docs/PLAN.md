@@ -165,7 +165,7 @@ All contrast values were calculated with the WCAG formula. Two gold utilities in
 | Route | Purpose |
 |---|---|
 | `/book/status` | Payment result: confirmed, processing, failed or expired |
-| `/terms`, `/privacy`, `/refund-policy` | Legal pages for gateway approval, in one text layout; Satakshi supplies the text |
+| `/terms`, `/privacy`, `/refund-policy`, `/shipping-policy` | Legal pages for Razorpay approval, in one text layout (`components/legal/legal-page.tsx`). Drafted from Razorpay's list and the Consumer Protection (E-Commerce) Rules, 2020; Satakshi confirms the wording. Linked from the footer and the checkout checkbox |
 | `404`, `sitemap.xml`, `robots.txt`, share image, favicon | System files |
 
 ### Admin

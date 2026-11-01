@@ -1,6 +1,7 @@
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { format } from "date-fns";
 import { Lock } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ServiceMeta } from "@/components/services/service-card";
@@ -187,7 +188,20 @@ export function StepReview({
                 onChange={(e) => setAgreed(e.target.checked)}
                 className="mt-1 size-4 shrink-0 accent-gold-700"
               />
-              I understand that bookings are non-refundable.
+              <span>
+                I have read the{" "}
+                <Link href="/terms" className="font-semibold text-gold-800 underline underline-offset-4">
+                  terms
+                </Link>{" "}
+                and the{" "}
+                <Link
+                  href="/refund-policy"
+                  className="font-semibold text-gold-800 underline underline-offset-4"
+                >
+                  refund policy
+                </Link>
+                . Bookings are non-refundable except as the policy describes.
+              </span>
             </label>
             {!started ? (
               <div className="mt-5">

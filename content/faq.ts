@@ -21,6 +21,6 @@ export const faq = [
   },
   {
     q: "Can I get a refund?",
-    a: "Bookings are non-refundable.",
+    a: "Bookings are non-refundable, except in the cases listed in our refund and cancellation policy.",
   },
 ] as const;

@@ -5,7 +5,7 @@ import { Mandala } from "@/components/art/mandala";
 import { Wordmark } from "@/components/brand/wordmark";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { navigation, site } from "@/lib/site";
+import { navigation, policies, site } from "@/lib/site";
 
 // Read once at build time; the site is rebuilt on every deploy.
 const year = new Date().getFullYear();
@@ -145,13 +145,30 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="flex flex-col items-start gap-2 border-t border-white/10 py-8 text-sm text-mist sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            © {year} {site.name}. All rights reserved.
-          </p>
-          <p>
-            Made by <strong className="font-bold text-white">WhyCreatives</strong>
-          </p>
+        {/* Bottom legal row: the policy pages, then copyright and the studio credit. */}
+        <div className="border-t border-white/10 py-10">
+          <nav aria-label="Policies">
+            <ul className="flex flex-wrap justify-center gap-x-7 gap-y-3 sm:justify-start">
+              {policies.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="rounded-sm text-sm font-semibold text-mist transition-colors duration-300 hover:text-gold-300 focus-visible:text-gold-300 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold-300"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          <div className="mt-8 flex flex-col items-center gap-2 text-center text-sm text-mist sm:flex-row sm:justify-between sm:text-left">
+            <p>
+              © {year} {site.name}. All rights reserved.
+            </p>
+            <p>
+              Made by <strong className="font-bold text-white">WhyCreatives</strong>
+            </p>
+          </div>
         </div>
       </Container>
     </footer>

@@ -16,7 +16,21 @@ export const site = {
     time: "11 am – 9 pm",
     timeZone: "IST",
   },
+  // Still to be confirmed by Satakshi. Each one appears on the Contact page only once it is set,
+  // so no placeholder text reaches the live site. Razorpay needs the address and the grievance
+  // officer's title before it approves the site.
+  address: null as string | null,
+  grievanceDesignation: null as string | null,
 } as const;
+
+// Links in the footer's policy row. Each one is a page Razorpay and consumer law ask for.
+export const policies = [
+  { href: "/privacy", label: "Privacy policy" },
+  { href: "/terms", label: "Terms and conditions" },
+  { href: "/refund-policy", label: "Refund and cancellation" },
+  { href: "/shipping-policy", label: "Shipping and delivery" },
+  { href: "/contact#grievance", label: "Grievance officer" },
+] as const;
 
 export const navigation = [
   { href: "/", label: "Home" },

@@ -17,6 +17,15 @@ const channels = [
   { icon: Clock, label: "Hours", value: `${site.hours.days}, ${site.hours.time} ${site.hours.timeZone}` },
 ] as const;
 
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-sm font-semibold text-gold-800">{label}</dt>
+      <dd className="mt-1 font-semibold [overflow-wrap:anywhere] text-ink">{value}</dd>
+    </div>
+  );
+}
+
 export default function ContactPage() {
   return (
     <>
@@ -71,6 +80,34 @@ export default function ContactPage() {
             <h2 className="text-3xl">Send a message</h2>
             <p className="mt-2 mb-8 text-ink-muted">{site.firstName} will reply by email or phone.</p>
             <ContactForm />
+          </div>
+        </div>
+      </Container>
+
+      {/* Business and grievance details. Razorpay and consumer law ask for these on the site. */}
+      <Container className="pb-24 lg:pb-32">
+        <div className="grid gap-10 rounded-[32px] bg-ivory p-8 ring-1 ring-line sm:p-10 lg:grid-cols-2 lg:gap-16">
+          <div>
+            <p className="eyebrow">Business details</p>
+            <dl className="mt-6 space-y-5">
+              <Detail label="Business name" value={site.name} />
+              <Detail label="Run by" value={site.owner} />
+              {site.address ? <Detail label="Address" value={site.address} /> : null}
+            </dl>
+          </div>
+          <div id="grievance" className="scroll-mt-28">
+            <p className="eyebrow">Grievance officer</p>
+            <dl className="mt-6 space-y-5">
+              <Detail label="Name" value={site.owner} />
+              {site.grievanceDesignation ? (
+                <Detail label="Designation" value={site.grievanceDesignation} />
+              ) : null}
+              <Detail label="Email" value={site.email} />
+              <Detail label="Phone" value={site.phone.display} />
+            </dl>
+            <p className="mt-6 text-ink">
+              We acknowledge every complaint within 48 hours and resolve it within one month.
+            </p>
           </div>
         </div>
       </Container>
