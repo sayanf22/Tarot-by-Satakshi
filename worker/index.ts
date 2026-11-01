@@ -11,6 +11,18 @@ import { publicRoutes } from "./routes/public";
 // wrangler.jsonc); every page is served by Cloudflare as a static asset.
 const app = new Hono<AppContext>();
 
+// Never serve the API or images over plain HTTP: send the client to HTTPS
+// (308 keeps the method). Pages get the same from "Always Use HTTPS" once the
+// custom domain is on Cloudflare; until then HSTS upgrades repeat visits.
+app.use("*", async (c, next) => {
+  const url = new URL(c.req.url);
+  if (url.protocol === "http:" && url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+    url.protocol = "https:";
+    return c.redirect(url.toString(), 308);
+  }
+  await next();
+});
+
 function ping(db: D1Database) {
   return db
     .prepare("SELECT 1 AS ok")
