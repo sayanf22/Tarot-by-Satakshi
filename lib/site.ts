@@ -23,14 +23,19 @@ export const site = {
   grievanceDesignation: null as string | null,
 } as const;
 
-// Links in the footer's policy row. Each one is a page Razorpay and consumer law ask for.
+// Links in the footer's policy row. Every page here is one that Razorpay's website checks
+// or consumer law asks for: pricing, the three policies, shipping and the grievance officer.
 export const policies = [
+  { href: "/pricing", label: "Pricing" },
   { href: "/privacy", label: "Privacy policy" },
   { href: "/terms", label: "Terms and conditions" },
   { href: "/refund-policy", label: "Refund and cancellation" },
   { href: "/shipping-policy", label: "Shipping and delivery" },
   { href: "/contact#grievance", label: "Grievance officer" },
 ] as const;
+
+// The studio credit in the footer. The link was supplied by the user.
+export const studio = { name: "WhyCreatives", url: "https://whycreatives.in" } as const;
 
 export const navigation = [
   { href: "/", label: "Home" },

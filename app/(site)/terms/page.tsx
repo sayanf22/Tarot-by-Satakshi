@@ -52,8 +52,7 @@ const sections: LegalSection[] = [
     body: (
       <Bullets>
         <li>
-          Prices are shown in Indian rupees (INR) on the Services page and on the booking page, before you
-          pay.
+          Prices are shown in Indian rupees (INR) on the Pricing page and on the booking page, before you pay.
         </li>
         <li>Payment is taken in full when you book.</li>
         <li>

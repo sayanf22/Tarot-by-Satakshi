@@ -5,7 +5,7 @@ import { Mandala } from "@/components/art/mandala";
 import { Wordmark } from "@/components/brand/wordmark";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { navigation, policies, site } from "@/lib/site";
+import { navigation, policies, site, studio } from "@/lib/site";
 
 // Read once at build time; the site is rebuilt on every deploy.
 const year = new Date().getFullYear();
@@ -166,7 +166,16 @@ export function SiteFooter() {
               © {year} {site.name}. All rights reserved.
             </p>
             <p>
-              Made by <strong className="font-bold text-white">WhyCreatives</strong>
+              Made by{" "}
+              <a
+                href={studio.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-sm font-bold text-white underline underline-offset-4 transition-colors duration-300 hover:text-gold-300 focus-visible:text-gold-300 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold-300"
+              >
+                {studio.name}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
             </p>
           </div>
         </div>
