@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build && node scripts/fix-export-segments.mjs",
+    "build": "node scripts/fetch-services.mjs && next build && node scripts/fix-export-segments.mjs && node scripts/csp.mjs",
     "preview": "npm run build && wrangler dev",
     "worker:dev": "wrangler dev",
     "cf-typegen": "wrangler types worker/worker-configuration.d.ts",

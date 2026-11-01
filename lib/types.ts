@@ -19,6 +19,8 @@ export type Service = {
   pricePaise?: number;
   /** True for layout samples that must be replaced with her real list. */
   sample?: boolean;
+  /** Set by the API: has a real price and length, so it can be paid for online. */
+  bookable?: boolean;
 };
 
 export const categoryLabels: Record<ServiceCategory, string> = {

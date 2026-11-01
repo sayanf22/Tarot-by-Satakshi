@@ -287,9 +287,11 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 
 ## 10. Security
 
-**Admin login:** Cloudflare Access with an email one-time code, restricted to Satakshi's email (the free Zero Trust plan covers this).
-- The Worker verifies the `Cf-Access-Jwt-Assertion` token with `jose` on every `/api/admin/*` call: signature, audience, expiry and email.
-- There's no password to leak or brute-force, and token checks use very little CPU. Password hashing, by contrast, has been reported hitting the 10 ms free-plan CPU limit.
+**Admin login (changed 1 November 2026):** Cloudflare Access and R2 both need a payment card on the account, so the admin uses two factors stored as Worker secrets instead: a long passphrase (`ADMIN_PASSWORD`) and a 6-digit code from an authenticator app (`ADMIN_TOTP_SECRET`, RFC 6238).
+- Compared in constant time; no password hashing, so it stays far inside the 10 ms CPU limit.
+- Each code works once (last used step stored in `settings`); 5 tries a minute per IP (Rate Limiting binding); lockout after 10 failures in 15 minutes from anywhere (`LOGS.login_attempts`).
+- Session: random 32-byte token in a `__Host-tbs_admin` cookie (HttpOnly, Secure, SameSite=Strict, 12 hours); only its SHA-256 is stored in `admin_sessions`. Sign out, or sign out on all devices.
+- Every admin change also needs a same-origin request, and is written to `LOGS.audit_log`.
 - The `workers.dev` and preview URLs are off in production, so Access can't be bypassed through another hostname.
 
 **Inputs and requests**
@@ -311,7 +313,15 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 - HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors 'none'`.
 - Fonts are self-hosted.
 
-**Uploads (R2):** admin only; JPEG, PNG and WebP only (no SVG), with a size limit and random names.
+**Uploads (D1, not R2):** admin only. The browser resizes each photo to WebP (longest side 1,800 px, never cropped) so it fits one D1 row (2 MB limit). The Worker checks the real type from the file's first bytes (JPEG, PNG, WebP; SVG refused), stores the bytes in the least-full of `MEDIA_1..4` (4 × 500 MB = 2 GB) under a random key, and indexes it in `media`. Served from `/media/<key>` with `nosniff`, a sandbox CSP and long caching.
+
+**Databases (free plan: 10 × 500 MB, 5 GB total):** `DB` (plans, hours, bookings, payments, messages, sessions), `LOGS` (email, audit, payment events, sign-in attempts; pruned after a year), `MEDIA_1..4` (image bytes). Four slots are left free for later. Migrations live in `migrations/core`, `migrations/logs`, `migrations/media`. D1 Time Travel gives 7 days of point-in-time restore on the free plan.
+
+**Payments (Razorpay Standard Checkout):** the amount always comes from D1, never the browser. `POST /api/bookings` holds the time (15 minutes) and creates the order; Checkout returns `payment_id`, `order_id`, `signature`; `POST /api/payments/verify` checks HMAC-SHA256(`order_id|payment_id`) with the key secret in constant time, using our own order id, then fetches the payment from Razorpay and confirms only if it is captured for exactly our order, amount and currency (authorized payments are captured). `POST /api/payments/webhook` verifies `X-Razorpay-Signature` over the raw body and settles the same way, so a closed browser still confirms. Settling is idempotent. A late payment re-claims the time if it's still free; if another client took it, the full amount is refunded automatically. A cron every 10 minutes releases lapsed holds, asks Razorpay about recent unpaid orders (missed webhooks), and prunes old data. The admin can refund a paid booking (locked first, so it can't refund twice).
+
+**Spam:** Cloudflare Turnstile on the contact form and on Pay (widget "Tarot by Satakshi forms"; secret `TURNSTILE_SECRET`; hostname checked). Add the custom domain to the widget when it exists.
+
+**Content-Security-Policy:** `scripts/csp.mjs` hashes each page's inline scripts at build time and writes a per-page policy (no `'unsafe-inline'` for scripts; outside scripts only from `*.razorpay.com` and `challenges.cloudflare.com`). API responses send `default-src 'none'`.
 
 **Accounts:** two-factor login on Cloudflare, the gateway and Resend. Deploys use a scoped Cloudflare API token.
 
@@ -383,11 +393,11 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 | 2f Word panel and footer | **Done** | Gold ribbon replaced by a rounded champagne panel (label, slow word-by-word headline, icon word strip with edge fades); footer pure black with the turning mandala; deploy fixed with a Wrangler build step |
 | 2c Home redesign | **Done** | Hero of four tarot cards dealt from the centre that turn face up (tap to turn again); crossing word ribbons; "Meet Satakshi" with her two photos and a turning badge; readings as a fanned deck of flip cards; topics as a line of words; drawn four-step timeline; one black session panel; open FAQ list. Photos: originals in `image/` (not deployed), web versions made by `node scripts/process-photos.mjs` (watermark strip cropped, metadata removed, 480/800/1200 px WebP) |
 | 2 Public pages (sample data) | **Done** | Home, About, Services (with FAQ), Book (4 steps, Pay disabled), `/book/status`, Contact, 404. Legal pages wait for policy text; sitemap and share image wait for the domain |
-| 3 Admin UI (mock data) | | All admin screens |
+| 3 Admin UI | **Done** | `/admin`: sign-in (passphrase + authenticator code), Overview, Bookings (detail, note, done, cancel, refund), Plans (add, edit, archive, restore, delete if never booked, Publish to website via a Workers Builds deploy hook), Hours (weekly, days off, booking rules), Messages, Images |
+| 7 Payments | **Built and tested against a mock** | Razorpay adapter, verify, webhook, reconcile cron, auto refund for taken times. Switched off until `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` are set (webhook URL `/api/payments/webhook`, events `payment.captured`, `payment.authorized`, `order.paid`, `payment.failed`, `refund.processed`) |
 | 4 Backend foundation | **Done** (CSP still to do) | D1 `tarot-by-satakshi-db` (APAC) with `migrations/0001_init.sql` applied locally and remotely; Hono routes in `worker/routes/`; shared Zod schemas; same-origin check, JSON size limit and D1 rate limits (salted IP hash, secret `RATE_LIMIT_SALT`); `/api/contact` saves to `enquiries` and emails via Resend once configured |
 | 5 Booking engine | **Done** (no payment yet) | `/api/slots` from weekly hours, overrides, notice and window; `/api/bookings` creates a 15-minute hold; 15-minute `booking_slot_units` primary key blocks double booking (tested with two simultaneous requests: 201 and 409); `/api/bookings/:ref` status. The booking page now shows real free times |
-| 6 Admin API | **Done** (Access not yet set up) | `/api/admin/*`: bookings, enquiries, services, hours, overrides, settings, image upload/delete. Every call checks the Cloudflare Access JWT (signature, issuer, audience, expiry, admin email); refused with 503 until `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are set. Images: JPEG/PNG/WebP by magic bytes, 5 MB max, random keys, served from `/media/*`; needs R2 turned on and the `MEDIA` binding |
-| 7 Payments (sandbox) | | Gateway adapter and tests |
+| 6 Admin API | **Done** | `/api/admin/*` behind the session check (see section 10). Images in D1 media databases instead of R2 |
 | 8 Emails and content | | Resend templates, DNS, real copy and photos |
 | 9 Security and free-plan check | | Full test pass, CPU per endpoint |
 | 10 Launch | | Domain, live keys, onboarding |

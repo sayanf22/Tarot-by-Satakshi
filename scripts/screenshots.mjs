@@ -27,7 +27,7 @@ for (const width of widths) {
   for (const path of paths) {
     // The 404 page is expected to log its own 404 response; don't count it as an error.
     const before = errors.length;
-    const res = await page.goto(base + path, { waitUntil: "networkidle" });
+    const res = await page.goto(base + path, { waitUntil: "load" });
     if (res?.status() === 404) errors.splice(before);
     await page.evaluate(() => document.fonts.ready);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

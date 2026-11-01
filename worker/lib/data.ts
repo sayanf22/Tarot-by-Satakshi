@@ -15,7 +15,13 @@ export type ServiceRow = {
   active: number;
   sort_order: number;
   image_key: string | null;
+  archived: number;
 };
+
+/** A plan can be booked online only once it has a real price and length. */
+export function bookable(s: ServiceRow) {
+  return s.price_paise != null && s.price_paise >= 100 && s.duration_min != null && s.is_sample === 0;
+}
 
 /** Public shape of a service (matches lib/types.ts `Service`). */
 export function publicService(s: ServiceRow) {
@@ -31,18 +37,22 @@ export function publicService(s: ServiceRow) {
     pricePaise: s.price_paise ?? undefined,
     sample: s.is_sample === 1 || undefined,
     image: s.image_key ? `/media/${s.image_key}` : undefined,
+    bookable: bookable(s),
   };
 }
 
 export async function activeServices(db: D1Database) {
   const { results } = await db
-    .prepare("SELECT * FROM services WHERE active = 1 ORDER BY sort_order, id")
+    .prepare("SELECT * FROM services WHERE active = 1 AND archived = 0 ORDER BY sort_order, id")
     .all<ServiceRow>();
   return results;
 }
 
 export async function serviceBySlug(db: D1Database, slug: string) {
-  return db.prepare("SELECT * FROM services WHERE slug = ?1 AND active = 1").bind(slug).first<ServiceRow>();
+  return db
+    .prepare("SELECT * FROM services WHERE slug = ?1 AND active = 1 AND archived = 0")
+    .bind(slug)
+    .first<ServiceRow>();
 }
 
 export type BookingSettings = {
@@ -119,7 +129,7 @@ export async function freeSlots(db: D1Database, date: string, durationMin: numbe
       `SELECT u.unit_start FROM booking_slot_units u
        JOIN bookings b ON b.id = u.booking_id
        WHERE u.unit_start >= ?1 AND u.unit_start < ?2
-         AND (b.status = 'confirmed' OR (b.status = 'held' AND b.hold_expires_at > ?3))`,
+         AND (b.status IN ('confirmed', 'completed') OR (b.status = 'held' AND b.hold_expires_at > ?3))`,
     )
     .bind(dayStart, dayEnd, now)
     .all<{ unit_start: number }>();

@@ -1,10 +1,10 @@
 import type { Service } from "@/lib/types";
+import live from "./services.live.json";
 
-// SAMPLE SERVICES: layout preview only.
-// Satakshi is writing her real categories, services, durations and prices.
-// Replace this list with hers. Do not publish prices or durations until she confirms them.
-// In phase 4 this list moves to D1 and is edited from the admin dashboard.
-export const services: readonly Service[] = [
+// Plans come from D1 (managed in the admin). scripts/fetch-services.mjs saves the
+// live list to services.live.json before each build. The sample list below is
+// only used if that file is empty (for example a fresh clone with no API access).
+const samples: readonly Service[] = [
   {
     slug: "tarot-reading",
     name: "Tarot Reading",
@@ -56,6 +56,8 @@ export const services: readonly Service[] = [
     sample: true,
   },
 ];
+
+export const services: readonly Service[] = (live as Service[]).length ? (live as Service[]) : samples;
 
 export function getService(slug: string | null | undefined) {
   return services.find((s) => s.slug === slug);

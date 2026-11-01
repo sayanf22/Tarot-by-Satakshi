@@ -9,7 +9,7 @@
   // Skipped for `wrangler dev`, and when the dashboard build already made ./out (see the script).
   "build": {
     "command": "node scripts/cf-build.mjs",
-    "watch_dir": "scripts",
+    "watch_dir": "scripts"
   },
   "assets": {
     // Next.js static export output.
@@ -18,30 +18,75 @@
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash",
     // Only API requests and uploaded images run the Worker; every page is a free static asset.
-    "run_worker_first": ["/api/*", "/media/*"],
+    "run_worker_first": ["/api/*", "/media/*"]
   },
+  // Free plan: 10 databases of 500 MB (5 GB in total). Data is split by purpose:
+  // DB = bookings, payments, plans, hours, messages (small, hot);
+  // LOGS = email, audit and payment-event records (grows, pruned by the cron);
+  // MEDIA_1..4 = image bytes, 4 × 500 MB = 2 GB for photos (no card needed, unlike R2).
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "tarot-by-satakshi-db",
       "database_id": "8c4f21de-d46d-40a8-bc18-d9bf93a5395c",
-      "migrations_dir": "migrations",
+      "migrations_dir": "migrations/core"
     },
+    {
+      "binding": "LOGS",
+      "database_name": "tarot-by-satakshi-logs",
+      "database_id": "1b8089b5-9aeb-40dc-a624-dc66a958490c",
+      "migrations_dir": "migrations/logs"
+    },
+    {
+      "binding": "MEDIA_1",
+      "database_name": "tarot-by-satakshi-media-1",
+      "database_id": "cd13f0eb-0a0e-4ea6-bf6b-59a7cf62695c",
+      "migrations_dir": "migrations/media"
+    },
+    {
+      "binding": "MEDIA_2",
+      "database_name": "tarot-by-satakshi-media-2",
+      "database_id": "898aa062-e718-47ed-b7b9-0888fa79be4b",
+      "migrations_dir": "migrations/media"
+    },
+    {
+      "binding": "MEDIA_3",
+      "database_name": "tarot-by-satakshi-media-3",
+      "database_id": "8142b5ab-26d3-47e3-9f39-5838a9279867",
+      "migrations_dir": "migrations/media"
+    },
+    {
+      "binding": "MEDIA_4",
+      "database_name": "tarot-by-satakshi-media-4",
+      "database_id": "28cabcbf-3ae7-407e-8403-15a80ed8465f",
+      "migrations_dir": "migrations/media"
+    }
   ],
-  // Image storage (R2) is added here once R2 is turned on for the account:
-  // "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "tarot-by-satakshi-media" }]
-  // Settings that are not secret. Secrets (API keys, salts) are set with
-  // `wrangler secret put` or in the dashboard, never in this file.
+  // Per-visitor request limits, counted by Cloudflare (no database writes).
+  // Period must be 10 or 60 seconds.
+  "ratelimits": [
+    { "name": "RL_READ", "namespace_id": "7101", "simple": { "limit": 60, "period": 60 } },
+    { "name": "RL_FORM", "namespace_id": "7102", "simple": { "limit": 5, "period": 60 } },
+    { "name": "RL_LOGIN", "namespace_id": "7103", "simple": { "limit": 5, "period": 60 } }
+  ],
+  // Every 10 minutes: release lapsed holds, catch any payment whose webhook was
+  // missed, and prune old records. Free plan allows 5 cron triggers per account.
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+  // Settings that are not secret. Secrets are set in the dashboard (Worker >
+  // Settings > Variables and Secrets) or with `wrangler secret put`, never here:
+  // ADMIN_PASSWORD, ADMIN_TOTP_SECRET, RATE_LIMIT_SALT, TURNSTILE_SECRET,
+  // RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, DEPLOY_HOOK_URL,
+  // RESEND_API_KEY.
   "vars": {
-    // Cloudflare Access for the admin. Empty means admin sign-in is off (every admin call is refused).
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": "",
-    "ADMIN_EMAILS": "tarotwithsatakshi@gmail.com",
-    // Where enquiry and booking emails go, and the sender once Resend is set up.
+    // Where booking and enquiry emails go, and the sender once Resend is set up
+    // (for example "Tarot by Satakshi <bookings@mail.example.com>").
     "NOTIFY_EMAIL": "tarotwithsatakshi@gmail.com",
-    "EMAIL_FROM": "",
+    "EMAIL_FROM": ""
   },
   "observability": {
     "enabled": true,
-  },
+    "head_sampling_rate": 1
+  }
 }

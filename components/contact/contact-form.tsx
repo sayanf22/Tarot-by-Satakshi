@@ -1,11 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import type { TurnstileInstance } from "@marsidev/react-turnstile";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CircleCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { describedBy, Field, TextArea, TextInput } from "@/components/ui/field";
+import { TurnstileField } from "@/components/ui/turnstile-field";
 import { site } from "@/lib/site";
 import { contactSchema, type ContactInput } from "@/lib/validation/contact";
 
@@ -15,6 +17,8 @@ type Status = "idle" | "sent" | "error";
 // emails Satakshi once Resend is set up. If it fails, her contact details are shown.
 export function ContactForm() {
   const [status, setStatus] = useState<Status>("idle");
+  const [token, setToken] = useState<string | null>(null);
+  const turnstile = useRef<TurnstileInstance | undefined>(undefined);
   const {
     register,
     handleSubmit,
@@ -32,13 +36,17 @@ export function ContactForm() {
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, turnstileToken: token }),
       });
       if (!res.ok) throw new Error(String(res.status));
       reset();
       setStatus("sent");
     } catch {
       setStatus("error");
+    } finally {
+      // Each Turnstile token works once.
+      turnstile.current?.reset();
+      setToken(null);
     }
   }
 
@@ -116,7 +124,9 @@ export function ContactForm() {
             </p>
           ) : null}
 
-          <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+          <TurnstileField ref={turnstile} onToken={setToken} />
+
+          <Button type="submit" disabled={isSubmitting || !token} className="w-full sm:w-auto">
             {isSubmitting ? "Sending…" : "Send message"}
           </Button>
         </form>

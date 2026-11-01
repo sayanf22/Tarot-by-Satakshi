@@ -36,3 +36,6 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Local copy of admin sign-in details (move to a password manager, then delete)
+*.local.txt

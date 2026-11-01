@@ -1,8 +1,14 @@
+import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { format } from "date-fns";
 import { Lock } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ServiceMeta } from "@/components/services/service-card";
 import { Button } from "@/components/ui/button";
+import { TurnstileField } from "@/components/ui/turnstile-field";
+import { api } from "@/lib/api";
+import { openCheckout, type Checkout } from "@/lib/booking/razorpay-checkout";
+import { site } from "@/lib/site";
 import { formatLabels, type Service, type SessionFormat } from "@/lib/types";
 import { topicLabel, type BookingDetails } from "@/lib/validation/booking";
 import type { StepNumber } from "./step-indicator";
@@ -11,8 +17,10 @@ type Props = {
   service: Service;
   sessionFormat: SessionFormat;
   date: Date;
+  time: string;
   timeLabel: string;
   details: BookingDetails;
+  paymentsOn: boolean;
   onEdit: (step: StepNumber) => void;
 };
 
@@ -45,12 +53,91 @@ function Item({ label, value, wide }: { label: string; value: string; wide?: boo
   );
 }
 
-export function StepReview({ service, sessionFormat, date, timeLabel, details, onEdit }: Props) {
+type Started = { reference: string; holdExpiresAt: number; checkout: Checkout };
+type Phase = "idle" | "starting" | "paying" | "verifying";
+
+export function StepReview({
+  service,
+  sessionFormat,
+  date,
+  time,
+  timeLabel,
+  details,
+  paymentsOn,
+  onEdit,
+}: Props) {
+  const router = useRouter();
   const [agreed, setAgreed] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [started, setStarted] = useState<Started | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const turnstile = useRef<TurnstileInstance | undefined>(undefined);
+
   const needsBirth = service.category === "astrology";
   const birthTime = details.birthTimeUnknown
     ? `Not known${details.birthTimeApprox ? ` (about ${details.birthTimeApprox})` : ""}`
     : details.birthTime;
+  const canPay = paymentsOn && service.bookable === true;
+  const holdLeft = started ? Math.max(0, started.holdExpiresAt - now) : 0;
+
+  // Tick once a second while a slot is held, to show the time left.
+  useEffect(() => {
+    if (!started) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [started]);
+
+  async function pay(existing: Started | null) {
+    setError(null);
+    let s = existing && existing.holdExpiresAt > Date.now() + 30_000 ? existing : null;
+    if (!s) {
+      setPhase("starting");
+      const res = await api<Started>("/api/bookings", {
+        method: "POST",
+        json: {
+          service: service.slug,
+          format: sessionFormat,
+          date: format(date, "yyyy-MM-dd"),
+          time,
+          agreed: true,
+          details,
+          turnstileToken: token ?? undefined,
+        },
+      });
+      turnstile.current?.reset();
+      setToken(null);
+      if (!res.ok) {
+        setPhase("idle");
+        setError(res.error);
+        return;
+      }
+      s = res.data;
+      setStarted(s);
+    }
+    setPhase("paying");
+    let result;
+    try {
+      result = await openCheckout(s.checkout, (msg) => setError(msg));
+    } catch {
+      setPhase("idle");
+      setError("The payment window couldn't open. Please check your connection and try again.");
+      return;
+    }
+    if (!result) {
+      setPhase("idle");
+      return;
+    }
+    setPhase("verifying");
+    // Even if this call fails, the webhook confirms the payment; the status page checks.
+    await api("/api/payments/verify", { method: "POST", json: { reference: s.reference, ...result } });
+    router.push(`/book/status?ref=${encodeURIComponent(s.reference)}`);
+  }
+
+  const busy = phase !== "idle";
+  const mins = Math.floor(holdLeft / 60_000);
+  const secs = String(Math.floor((holdLeft % 60_000) / 1000)).padStart(2, "0");
 
   return (
     <div className="space-y-6">
@@ -89,22 +176,73 @@ export function StepReview({ service, sessionFormat, date, timeLabel, details, o
           <span className="font-semibold text-ink">Amount</span>
           <ServiceMeta service={service} />
         </div>
-        <label className="mt-5 flex cursor-pointer items-start gap-3 text-[0.95rem] text-ink">
-          <input
-            type="checkbox"
-            checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-            className="mt-1 size-4 shrink-0 accent-gold-700"
-          />
-          I understand that bookings are non-refundable.
-        </label>
-        <Button className="mt-6 w-full" disabled aria-describedby="payment-note">
-          <Lock className="size-4" aria-hidden="true" />
-          Pay and confirm
-        </Button>
-        <p id="payment-note" className="mt-3 text-center text-sm text-ink-muted">
-          Online payment is being set up and will open here soon.
-        </p>
+
+        {canPay ? (
+          <>
+            <label className="mt-5 flex cursor-pointer items-start gap-3 text-[0.95rem] text-ink">
+              <input
+                type="checkbox"
+                checked={agreed}
+                disabled={busy || Boolean(started)}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-1 size-4 shrink-0 accent-gold-700"
+              />
+              I understand that bookings are non-refundable.
+            </label>
+            {!started ? (
+              <div className="mt-5">
+                <TurnstileField ref={turnstile} onToken={setToken} />
+              </div>
+            ) : (
+              <output className="mt-5 block rounded-2xl bg-white px-4 py-3 text-sm text-ink">
+                {holdLeft > 0
+                  ? `Your time is held for ${mins}:${secs}. Finish paying to confirm it.`
+                  : "The hold has ended. Paying again will check the time is still free."}
+              </output>
+            )}
+            {error ? (
+              <p
+                role="alert"
+                className="mt-4 rounded-2xl border border-danger/30 bg-white px-4 py-3 text-sm text-danger"
+              >
+                {error}
+              </p>
+            ) : null}
+            <Button
+              className="mt-6 w-full"
+              disabled={!agreed || busy || (!started && !token)}
+              onClick={() => void pay(started)}
+            >
+              <Lock className="size-4" aria-hidden="true" />
+              {phase === "starting"
+                ? "Holding your time…"
+                : phase === "paying"
+                  ? "Payment window open…"
+                  : phase === "verifying"
+                    ? "Confirming payment…"
+                    : started
+                      ? "Continue to payment"
+                      : "Pay and confirm"}
+            </Button>
+            <p className="mt-3 text-center text-sm text-ink-muted">
+              Secure payment by Razorpay. Card and UPI details never reach this site.
+            </p>
+          </>
+        ) : (
+          <>
+            <Button className="mt-6 w-full" disabled aria-describedby="payment-note">
+              <Lock className="size-4" aria-hidden="true" />
+              Pay and confirm
+            </Button>
+            <p id="payment-note" className="mt-3 text-center text-sm text-ink-muted">
+              Online booking for this reading opens soon. To book now, call{" "}
+              <a href={site.phone.href} className="font-semibold text-gold-800 underline">
+                {site.phone.display}
+              </a>
+              .
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
 import type { Service, SessionFormat } from "@/lib/types";
 import type { BookingDetails } from "@/lib/validation/booking";
 import { BookingSummary } from "./booking-summary";
@@ -11,8 +12,17 @@ import { StepReview } from "./step-review";
 import { StepService } from "./step-service";
 import { StepTime } from "./step-time";
 
-export function BookingFlow({ services }: { services: readonly Service[] }) {
+export function BookingFlow({ services: built }: { services: readonly Service[] }) {
   const params = useSearchParams();
+  // The plans from the build show at once; the live list from the admin replaces them.
+  const [services, setServices] = useState<readonly Service[]>(built);
+  const [paymentsOn, setPaymentsOn] = useState(false);
+  useEffect(() => {
+    void api<{ services: Service[] }>("/api/services").then((r) => {
+      if (r.ok && r.data.services.length) setServices(r.data.services);
+    });
+    void api<{ payments: boolean }>("/api/config").then((r) => setPaymentsOn(r.ok && r.data.payments));
+  }, []);
   const preselected = services.find((s) => s.slug === params.get("service"));
 
   const [step, setStep] = useState<StepNumber>(1);
@@ -118,12 +128,14 @@ export function BookingFlow({ services }: { services: readonly Service[] }) {
             />
           ) : null}
 
-          {step === 4 && service && sessionFormat && date && timeLabel && details ? (
+          {step === 4 && service && sessionFormat && date && time && timeLabel && details ? (
             <StepReview
               service={service}
               sessionFormat={sessionFormat}
               date={date}
+              time={time}
               timeLabel={timeLabel}
+              paymentsOn={paymentsOn}
               details={details}
               onEdit={goTo}
             />
