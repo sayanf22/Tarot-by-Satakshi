@@ -287,7 +287,9 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 
 ## 10. Security
 
-**Admin login (changed 1 November 2026):** Cloudflare Access and R2 both need a payment card on the account, so the admin uses two factors stored as Worker secrets instead: a long passphrase (`ADMIN_PASSWORD`) and a 6-digit code from an authenticator app (`ADMIN_TOTP_SECRET`, RFC 6238).
+**Admin login (changed 1 November 2026):** Cloudflare Access and R2 both need a payment card on the account, so the admin signs in at `/admin` with a login ID (`ADMIN_LOGIN_ID` var), a password and a 6-digit authenticator code (`ADMIN_TOTP_SECRET`, RFC 6238).
+- First password: the `ADMIN_PASSWORD` secret. **Account > Change password** (current password + new password + fresh code) stores PBKDF2-SHA256 (20,000 rounds, about 5 ms) of HMAC(`PASSWORD_PEPPER`, password) in `admin_account`, and signs out every other device. Forgotten password: set a new `ADMIN_PASSWORD` secret; the stored hash's fingerprint no longer matches, so the new secret works.
+- Lockout: 5 failures in 15 minutes per IP, or 30 from anywhere. Preview URLs are off (`preview_urls: false`), and plain-HTTP API/image requests redirect to HTTPS.
 - Compared in constant time; no password hashing, so it stays far inside the 10 ms CPU limit.
 - Each code works once (last used step stored in `settings`); 5 tries a minute per IP (Rate Limiting binding); lockout after 10 failures in 15 minutes from anywhere (`LOGS.login_attempts`).
 - Session: random 32-byte token in a `__Host-tbs_admin` cookie (HttpOnly, Secure, SameSite=Strict, 12 hours); only its SHA-256 is stored in `admin_sessions`. Sign out, or sign out on all devices.
@@ -313,7 +315,7 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 - HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors 'none'`.
 - Fonts are self-hosted.
 
-**Uploads (D1, not R2):** admin only. The browser resizes each photo to WebP (longest side 1,800 px, never cropped) so it fits one D1 row (2 MB limit). The Worker checks the real type from the file's first bytes (JPEG, PNG, WebP; SVG refused), stores the bytes in the least-full of `MEDIA_1..4` (4 × 500 MB = 2 GB) under a random key, and indexes it in `media`. Served from `/media/<key>` with `nosniff`, a sandbox CSP and long caching.
+**Uploads (D1, not R2):** admin only. The browser (`lib/image-compress.ts`) re-encodes each photo as WebP at quality 0.9 (visually lossless; PNG graphics also tried lossless), longest side up to 2,400 px with step-down resizing, camera rotation applied and GPS/camera metadata removed, never cropped, so it fits one D1 row (2 MB limit). The Worker checks the real type from the file's first bytes (JPEG, PNG, WebP; SVG refused), stores the bytes in the least-full of `MEDIA_1..4` (4 × 500 MB = 2 GB) under a random key, and indexes it in `media`. Served from `/media/<key>` with `nosniff`, a sandbox CSP and long caching.
 
 **Databases (free plan: 10 × 500 MB, 5 GB total):** `DB` (plans, hours, bookings, payments, messages, sessions), `LOGS` (email, audit, payment events, sign-in attempts; pruned after a year), `MEDIA_1..4` (image bytes). Four slots are left free for later. Migrations live in `migrations/core`, `migrations/logs`, `migrations/media`. D1 Time Travel gives 7 days of point-in-time restore on the free plan.
 
