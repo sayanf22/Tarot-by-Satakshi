@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge, Notice, Panel, rupees, useAdminApi, when } from "./shared";
+import { Badge, PageTitle, Notice, Panel, rupees, useAdminApi, when } from "./shared";
 
 type Overview = {
   upcoming: number;
@@ -48,7 +48,7 @@ export function AdminOverview({ onOpen }: { onOpen: (tab: Tab) => void }) {
 
   return (
     <>
-      <h1 className="font-display text-4xl">Overview</h1>
+      <PageTitle title="Overview" />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (
           <button

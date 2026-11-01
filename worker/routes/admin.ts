@@ -1,7 +1,16 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../env";
-import { adminConfigured, login, logout, requireAdmin } from "../lib/auth";
+import {
+  adminConfigured,
+  changePassword,
+  login,
+  loginId,
+  logout,
+  MIN_PASSWORD,
+  passwordChangedAt,
+  requireAdmin,
+} from "../lib/auth";
 import { randomToken } from "../lib/crypto";
 import type { ServiceRow } from "../lib/data";
 import { fail, readJson, readText } from "../lib/http";
@@ -25,10 +34,14 @@ adminRoutes.get("/status", (c) => c.json({ configured: adminConfigured(c) }));
 adminRoutes.post("/login", async (c) => {
   await rateLimit(c, "RL_LOGIN", "login");
   const body = z
-    .object({ password: z.string().min(1).max(200), code: z.string().regex(/^\d{6}$/) })
+    .object({
+      id: z.string().min(1).max(254),
+      password: z.string().min(1).max(200),
+      code: z.string().regex(/^\d{6}$/),
+    })
     .safeParse(await readJson(c, 2048));
-  if (!body.success) fail(400, "Enter your password and the 6-digit code");
-  await login(c, body.data.password, body.data.code);
+  if (!body.success) fail(400, "Enter your ID, password and the 6-digit code");
+  await login(c, body.data.id, body.data.password, body.data.code);
   await audit(c.env, "admin", "signed_in");
   return c.json({ ok: true });
 });
@@ -45,6 +58,42 @@ adminRoutes.post("/logout", async (c) => {
 });
 
 adminRoutes.get("/me", (c) => c.json({ user: actor(c) }));
+
+adminRoutes.get("/account", async (c) => {
+  const [changed, sessions, recent] = await Promise.all([
+    passwordChangedAt(c),
+    c.env.DB.prepare("SELECT count(*) AS n FROM admin_sessions WHERE expires_at > ?1")
+      .bind(Date.now())
+      .first<{ n: number }>(),
+    c.env.LOGS.prepare("SELECT at, ok FROM login_attempts ORDER BY at DESC LIMIT 10").all<{
+      at: number;
+      ok: number;
+    }>(),
+  ]);
+  return c.json({
+    loginId: loginId(c),
+    passwordChangedAt: changed,
+    sessionExpires: c.get("sessionExpires"),
+    activeSessions: sessions?.n ?? 0,
+    minPassword: MIN_PASSWORD,
+    recentSignIns: recent.results,
+  });
+});
+
+adminRoutes.post("/password", async (c) => {
+  await rateLimit(c, "RL_LOGIN", "password");
+  const body = z
+    .object({
+      current: z.string().min(1).max(200),
+      next: z.string().min(1).max(200),
+      code: z.string().regex(/^\d{6}$/),
+    })
+    .safeParse(await readJson(c, 2048));
+  if (!body.success) fail(400, "Fill in all three fields");
+  await changePassword(c, body.data.current, body.data.next, body.data.code);
+  await audit(c.env, actor(c), "password.changed");
+  return c.json({ ok: true });
+});
 
 adminRoutes.get("/overview", async (c) => {
   const now = Date.now();

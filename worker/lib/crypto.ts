@@ -30,7 +30,43 @@ export async function safeEqual(a: string, b: string) {
     crypto.subtle.digest("SHA-256", encoder.encode(a)),
     crypto.subtle.digest("SHA-256", encoder.encode(b)),
   ]);
-  return crypto.subtle.timingSafeEqual(ha, hb) && a.length === b.length;
+  return crypto.subtle.timingSafeEqual(ha, hb);
+}
+
+export function toB64(buf: ArrayBuffer | Uint8Array) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+
+/**
+ * Password hash: PBKDF2-SHA256 (20,000 rounds, about 5 ms, inside the free plan's
+ * 10 ms CPU budget) over HMAC(pepper, password). The pepper is a Worker secret,
+ * so a copy of the database alone can't be used to guess the password.
+ */
+export const PASSWORD_ITERATIONS = 20_000;
+
+export async function hashPassword(
+  password: string,
+  pepper: string,
+  saltB64: string,
+  iterations = PASSWORD_ITERATIONS,
+) {
+  const peppered = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey(pepper, "SHA-256"),
+    encoder.encode(password),
+  );
+  const key = await crypto.subtle.importKey("raw", peppered, "PBKDF2", false, ["deriveBits"]);
+  const salt = Uint8Array.from(atob(saltB64), (ch) => ch.charCodeAt(0));
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    key,
+    256,
+  );
+  return toB64(bits);
+}
+
+export function newSalt() {
+  return toB64(crypto.getRandomValues(new Uint8Array(16)));
 }
 
 /** URL-safe random token. */

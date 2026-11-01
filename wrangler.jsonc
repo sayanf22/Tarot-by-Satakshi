@@ -76,10 +76,16 @@
   },
   // Settings that are not secret. Secrets are set in the dashboard (Worker >
   // Settings > Variables and Secrets) or with `wrangler secret put`, never here:
-  // ADMIN_PASSWORD, ADMIN_TOTP_SECRET, RATE_LIMIT_SALT, TURNSTILE_SECRET,
+  // ADMIN_PASSWORD, ADMIN_TOTP_SECRET, PASSWORD_PEPPER, RATE_LIMIT_SALT, TURNSTILE_SECRET,
   // RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, DEPLOY_HOOK_URL,
   // RESEND_API_KEY.
+  // Only the main workers.dev address serves the site. Version preview URLs would
+  // expose old builds with the same production databases, so they're off.
+  "workers_dev": true,
+  "preview_urls": false,
   "vars": {
+    // Admin login ID (not secret). The password and authenticator key are secrets.
+    "ADMIN_LOGIN_ID": "tarotwithsatakshi@gmail.com",
     // Where booking and enquiry emails go, and the sender once Resend is set up
     // (for example "Tarot by Satakshi <bookings@mail.example.com>").
     "NOTIFY_EMAIL": "tarotwithsatakshi@gmail.com",

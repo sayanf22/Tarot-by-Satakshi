@@ -226,6 +226,15 @@
   animation: particle var(--p-dur, 10s) ease-in-out var(--p-delay, 0s) infinite;
 }
 
+/* Horizontal tab strips scroll by touch without showing a scrollbar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @utility tabular {
   /* Lining figures: Playfair's default old-style numbers sit low next to text. */
   font-variant-numeric: tabular-nums lining-nums;

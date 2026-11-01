@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, inputClasses, TextArea, TextInput } from "@/components/ui/field";
-import { Badge, Empty, Notice, Panel, rupees, useAdminApi } from "./shared";
+import { Badge, Empty, Notice, PageTitle, Panel, rupees, useAdminApi } from "./shared";
 
 type Plan = {
   slug: string;
@@ -368,15 +368,19 @@ export function AdminPlans() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-4xl">Plans</h1>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => void publish()}>
-            Publish to website
-          </Button>
-          <Button onClick={() => setEditing({ form: blank, isNew: true })}>Add a plan</Button>
-        </div>
-      </div>
+      <PageTitle
+        title="Plans"
+        action={
+          <>
+            <Button size="sm" variant="outline" onClick={() => void publish()}>
+              Publish to website
+            </Button>
+            <Button size="sm" onClick={() => setEditing({ form: blank, isNew: true })}>
+              Add a plan
+            </Button>
+          </>
+        }
+      />
       <Notice>
         Changes are live on the booking page straight away. Use <strong>Publish to website</strong> to update
         the home and Services pages too.
@@ -405,8 +409,8 @@ export function AdminPlans() {
         ) : (
           <ul className="divide-y divide-line">
             {plans.map((p) => (
-              <li key={p.slug} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4">
-                <div className="min-w-0 flex-1">
+              <li key={p.slug} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:gap-4">
+                <div className="min-w-0 sm:flex-1">
                   <p className="font-semibold text-ink">
                     {p.name}{" "}
                     {p.archived ? (

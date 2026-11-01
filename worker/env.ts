@@ -7,6 +7,8 @@ export type AppEnv = Env & {
   ADMIN_PASSWORD?: string;
   /** Base32 TOTP secret shared with Satakshi's authenticator app. */
   ADMIN_TOTP_SECRET?: string;
+  /** Secret mixed into the stored password hash (never in the database). */
+  PASSWORD_PEPPER?: string;
   /** Salt for hashing visitor IPs before they are stored. */
   RATE_LIMIT_SALT?: string;
   /** Turnstile secret key. When set, the booking and contact forms must pass Turnstile. */
@@ -21,4 +23,4 @@ export type AppEnv = Env & {
   RESEND_API_KEY?: string;
 };
 
-export type AppContext = { Bindings: AppEnv; Variables: { adminEmail: string } };
+export type AppContext = { Bindings: AppEnv; Variables: { adminEmail: string; sessionExpires: number } };

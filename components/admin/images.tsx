@@ -1,40 +1,22 @@
 "use client";
 
+import { Copy, ImagePlus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Empty, Notice, Panel, useAdminApi } from "./shared";
+import { compressImage, formatBytes } from "@/lib/image-compress";
+import { Empty, Notice, PageTitle, Panel, useAdminApi } from "./shared";
 
 type Media = { key: string; content_type: string; size: number; alt: string; created_at: number };
 type Storage = { files: number; bytes: number; capacity: number };
-
-const MAX_SIDE = 1800;
-const MAX_BYTES = 1_900_000;
-
-/**
- * Resizes a photo in the browser to WebP (longest side 1800 px) before upload,
- * so it fits one database row and loads fast. The whole photo is kept: nothing is cropped.
- */
-async function prepare(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  for (const quality of [0.86, 0.78, 0.7, 0.6]) {
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/webp", quality));
-    if (blob && blob.size <= MAX_BYTES) return blob;
-  }
-  throw new Error("too big");
-}
+type Result = { name: string; before: number; after: number; ok: boolean; error?: string };
 
 export function AdminImages() {
   const adminApi = useAdminApi();
   const [items, setItems] = useState<Media[] | null>(null);
   const [storage, setStorage] = useState<Storage | null>(null);
+  const [results, setResults] = useState<Result[]>([]);
+  const [progress, setProgress] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -49,96 +31,158 @@ export function AdminImages() {
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
-    setBusy(true);
     setMsg(null);
-    let done = 0;
-    for (const file of Array.from(files)) {
+    const done: Result[] = [];
+    const list = Array.from(files).slice(0, 20);
+    for (const [i, file] of list.entries()) {
+      setProgress(`Compressing and uploading ${i + 1} of ${list.length}…`);
+      if (!/^image\/(jpeg|png|webp|heic|heif|avif|gif)$/.test(file.type)) {
+        done.push({ name: file.name, before: file.size, after: 0, ok: false, error: "not a photo" });
+        continue;
+      }
       try {
-        const blob = await prepare(file);
+        const c = await compressImage(file);
         const r = await adminApi<{ key: string }>(
-          `/media?alt=${encodeURIComponent(file.name.replace(/\.[^.]+$/, ""))}`,
+          `/media?alt=${encodeURIComponent(file.name.replace(/\.[^.]+$/, "").slice(0, 120))}`,
           {
             method: "POST",
-            body: blob,
-            headers: { "Content-Type": "image/webp" },
+            body: c.blob,
+            headers: { "Content-Type": c.type },
           },
         );
-        if (!r.ok) throw new Error(r.error);
-        done++;
-      } catch (err) {
-        setMsg({
-          tone: "error",
-          text: `${file.name}: ${err instanceof Error && err.message !== "too big" ? err.message : "couldn't be prepared. Try a JPEG or PNG."}`,
+        done.push(
+          r.ok
+            ? { name: file.name, before: file.size, after: c.blob.size, ok: true }
+            : { name: file.name, before: file.size, after: 0, ok: false, error: r.error },
+        );
+      } catch {
+        done.push({
+          name: file.name,
+          before: file.size,
+          after: 0,
+          ok: false,
+          error: "this browser couldn't read it; try a JPEG or PNG",
         });
       }
     }
-    setBusy(false);
-    if (done) setMsg({ tone: "ok", text: `${done} image${done > 1 ? "s" : ""} uploaded.` });
+    setProgress(null);
+    setResults(done);
     if (input.current) input.current.value = "";
     await load();
   }
 
-  async function remove(key: string) {
-    if (!confirm("Delete this image?")) return;
-    const r = await adminApi(`/media/${key}`, { method: "DELETE" });
-    setMsg(r.ok ? { tone: "ok", text: "Deleted." } : { tone: "error", text: r.error });
+  async function remove(m: Media) {
+    if (!confirm(`Delete "${m.alt || m.key}"?`)) return;
+    const r = await adminApi(`/media/${m.key}`, { method: "DELETE" });
+    setMsg(r.ok ? { tone: "ok", text: "Image deleted." } : { tone: "error", text: r.error });
     await load();
   }
 
+  async function copy(m: Media) {
+    await navigator.clipboard.writeText(`${location.origin}/media/${m.key}`).catch(() => {});
+    setMsg({ tone: "ok", text: "Link copied." });
+  }
+
+  const saved = results.filter((r) => r.ok);
+  const before = saved.reduce((a, r) => a + r.before, 0);
+  const after = saved.reduce((a, r) => a + r.after, 0);
+
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-4xl">Images</h1>
-        <label className="inline-flex">
-          <input
-            ref={input}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            className="sr-only"
-            onChange={(e) => void upload(e.target.files)}
-            disabled={busy}
-          />
-          <span className="inline-flex h-12 cursor-pointer items-center rounded-full bg-gold-foil px-7 font-bold text-ink shadow-gold">
-            {busy ? "Uploading…" : "Upload images"}
-          </span>
-        </label>
-      </div>
-      {storage ? (
-        <p className="text-sm text-ink-muted">
-          {storage.files} images · {(storage.bytes / 1_048_576).toFixed(1)} MB used of{" "}
-          {Math.round(storage.capacity / 1_073_741_824)} GB
-        </p>
-      ) : null}
+      <PageTitle
+        title="Images"
+        action={
+          <label className="inline-flex">
+            <input
+              ref={input}
+              type="file"
+              accept="image/*"
+              multiple
+              className="peer sr-only"
+              onChange={(e) => void upload(e.target.files)}
+              disabled={Boolean(progress)}
+            />
+            <span className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-gold-foil px-5 text-sm font-bold text-ink shadow-gold peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-gold-700 peer-disabled:opacity-60">
+              <ImagePlus className="size-4" aria-hidden="true" />
+              {progress ? "Uploading…" : "Upload images"}
+            </span>
+          </label>
+        }
+      />
+      <p className="text-sm text-ink-muted">
+        Photos are compressed in your browser before upload: sharp at full size, with location data removed.
+        Up to 20 at a time.
+        {storage
+          ? ` ${storage.files} images · ${formatBytes(storage.bytes)} used of ${Math.round(storage.capacity / 1_073_741_824)} GB.`
+          : ""}
+      </p>
+      {progress ? <Notice>{progress}</Notice> : null}
       {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
+      {results.length ? (
+        <Panel title="Last upload">
+          <ul className="space-y-2 text-sm">
+            {results.map((r) => (
+              <li key={r.name} className="flex flex-wrap justify-between gap-x-4 gap-y-1">
+                <span className="min-w-0 truncate font-semibold text-ink">{r.name}</span>
+                {r.ok ? (
+                  <span className="text-ink-muted tabular">
+                    {formatBytes(r.before)} → {formatBytes(r.after)} (
+                    {Math.max(0, Math.round((1 - r.after / r.before) * 100))}% smaller)
+                  </span>
+                ) : (
+                  <span className="text-danger">Not uploaded: {r.error}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {saved.length > 1 ? (
+            <p className="mt-3 text-sm font-semibold text-ink">
+              Total {formatBytes(before)} → {formatBytes(after)}
+            </p>
+          ) : null}
+        </Panel>
+      ) : null}
       <Panel>
         {!items ? (
           <p className="text-ink-muted">Loading…</p>
         ) : items.length === 0 ? (
           <Empty>No images yet. Upload photos to use them on plans.</Empty>
         ) : (
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
             {items.map((m) => (
-              <li key={m.key} className="overflow-hidden rounded-2xl ring-1 ring-line">
+              <li key={m.key} className="min-w-0 overflow-hidden rounded-2xl bg-white ring-1 ring-line">
+                {/* Shown whole (object-contain), never cropped. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`/media/${m.key}`}
                   alt={m.alt}
                   loading="lazy"
+                  decoding="async"
                   className="aspect-square w-full bg-ivory object-contain"
                 />
                 <div className="space-y-2 p-3">
-                  <p className="truncate text-xs text-ink-muted">{m.alt || m.key}</p>
+                  <p className="truncate text-xs font-semibold text-ink" title={m.alt}>
+                    {m.alt || "Untitled"}
+                  </p>
+                  <p className="text-xs text-ink-muted tabular">{formatBytes(m.size)}</p>
                   <div className="flex gap-2">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => void navigator.clipboard.writeText(`${location.origin}/media/${m.key}`)}
+                      className="h-9 flex-1 px-0"
+                      aria-label={`Copy link to ${m.alt || "image"}`}
+                      onClick={() => void copy(m)}
                     >
-                      Copy link
+                      <Copy className="size-4" aria-hidden="true" />
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => void remove(m.key)}>
-                      Delete
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 flex-1 px-0"
+                      aria-label={`Delete ${m.alt || "image"}`}
+                      onClick={() => void remove(m)}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
-import { Empty, Notice, Panel, useAdminApi } from "./shared";
+import { Empty, Notice, PageTitle, Panel, useAdminApi } from "./shared";
 
 type Rule = { weekday: number; enabled: number; open_min: number; close_min: number };
 type Override = {
@@ -97,7 +97,7 @@ export function AdminHours() {
 
   return (
     <>
-      <h1 className="font-display text-4xl">Hours</h1>
+      <PageTitle title="Hours" />
       {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
 
       <Panel

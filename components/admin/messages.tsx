@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge, Empty, Panel, useAdminApi, when } from "./shared";
+import { Badge, Empty, PageTitle, Panel, useAdminApi, when } from "./shared";
 
 type Enquiry = {
   id: number;
@@ -39,12 +39,14 @@ export function AdminMessages() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-4xl">Messages</h1>
-        <Button size="sm" variant="outline" onClick={() => setArchived(!archived)}>
-          {archived ? "Show inbox" : "Show archived"}
-        </Button>
-      </div>
+      <PageTitle
+        title={archived ? "Archived messages" : "Messages"}
+        action={
+          <Button size="sm" variant="outline" onClick={() => setArchived(!archived)}>
+            {archived ? "Show inbox" : "Show archived"}
+          </Button>
+        }
+      />
       <Panel>
         {!items ? (
           <p className="text-ink-muted">Loading…</p>

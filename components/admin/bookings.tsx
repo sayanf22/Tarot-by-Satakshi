@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
-import { Badge, Empty, Notice, Panel, rupees, statusTone, useAdminApi, when } from "./shared";
+import { Badge, PageTitle, Empty, Notice, Panel, rupees, statusTone, useAdminApi, when } from "./shared";
 
 type Row = {
   id: string;
@@ -186,7 +186,7 @@ export function AdminBookings() {
 
   return (
     <>
-      <h1 className="font-display text-4xl">Bookings</h1>
+      <PageTitle title="Bookings" />
       <div className="flex flex-wrap gap-2" role="tablist">
         {scopes.map((s) => (
           <button

@@ -42,6 +42,16 @@ export function rupees(paise: number) {
   }).format(paise / 100);
 }
 
+/** Page heading with an optional action that wraps under the title on small screens. */
+export function PageTitle({ title, action }: { title: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <h1 className="font-display text-[2rem] leading-tight sm:text-4xl">{title}</h1>
+      {action ? <div className="flex flex-wrap gap-2 sm:gap-3">{action}</div> : null}
+    </div>
+  );
+}
+
 export function Panel({
   title,
   action,
