@@ -1,16 +1,19 @@
 import { format } from "date-fns";
+import { useEffect, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { bookingWindow, isClosedDay, previewSlots } from "@/lib/booking/preview-slots";
+import { fetchSlots } from "@/lib/booking/fetch-slots";
+import { bookingWindow, isClosedDay, previewSlots, type Slot } from "@/lib/booking/preview-slots";
 import { optionClasses, optionState } from "./step-service";
 
 type Props = {
+  serviceSlug: string;
   date?: Date;
   time?: string;
   onDate: (date: Date | undefined) => void;
-  onTime: (time: string) => void;
+  onTime: (time: string, label: string) => void;
   onBack: () => void;
   onNext: () => void;
 };
@@ -20,9 +23,22 @@ function hasNoSlots(day: Date) {
   return isClosedDay(day) || previewSlots(day).length === 0;
 }
 
-export function StepTime({ date, time, onDate, onTime, onBack, onNext }: Props) {
+export function StepTime({ serviceSlug, date, time, onDate, onTime, onBack, onNext }: Props) {
   const { first, last } = bookingWindow();
-  const slots = date ? previewSlots(date) : [];
+  // Free times for the chosen date, from the booking engine.
+  const [loaded, setLoaded] = useState<{ key: string; slots: Slot[] }>();
+  const key = date ? `${serviceSlug}:${format(date, "yyyy-MM-dd")}` : "";
+  const slots = loaded?.key === key ? loaded.slots : [];
+  const loading = Boolean(date) && loaded?.key !== key;
+
+  useEffect(() => {
+    if (!date) return;
+    const controller = new AbortController();
+    fetchSlots(serviceSlug, date, controller.signal)
+      .then((list) => setLoaded({ key, slots: list }))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [serviceSlug, date, key]);
 
   return (
     <div className="space-y-10">
@@ -54,6 +70,10 @@ export function StepTime({ date, time, onDate, onTime, onBack, onNext }: Props) 
             <p className="mt-6 rounded-3xl border border-dashed border-gold-500/70 bg-ivory px-5 py-8 text-center text-ink-muted">
               Pick a date to see the free times.
             </p>
+          ) : loading ? (
+            <p className="mt-6 rounded-3xl border border-dashed border-gold-500/70 bg-ivory px-5 py-8 text-center text-ink-muted">
+              Checking free times…
+            </p>
           ) : slots.length === 0 ? (
             <p className="mt-6 rounded-3xl border border-dashed border-gold-500/70 bg-ivory px-5 py-8 text-center text-ink-muted">
               No free times on this day. Please choose another date.
@@ -72,7 +92,7 @@ export function StepTime({ date, time, onDate, onTime, onBack, onNext }: Props) 
                       name="time"
                       value={slot.value}
                       checked={selected}
-                      onChange={() => onTime(slot.value)}
+                      onChange={() => onTime(slot.value, slot.label)}
                       className="sr-only"
                     />
                     <span

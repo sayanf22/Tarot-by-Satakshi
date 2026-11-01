@@ -2,7 +2,6 @@
 
 import { useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
-import { previewSlots } from "@/lib/booking/preview-slots";
 import type { Service, SessionFormat } from "@/lib/types";
 import type { BookingDetails } from "@/lib/validation/booking";
 import { BookingSummary } from "./booking-summary";
@@ -23,12 +22,12 @@ export function BookingFlow({ services }: { services: readonly Service[] }) {
   );
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState<string>();
+  const [timeLabel, setTimeLabel] = useState<string>();
   const [details, setDetails] = useState<BookingDetails>();
   const topRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const service = services.find((s) => s.slug === serviceSlug);
-  const timeLabel = date && time ? previewSlots(date).find((s) => s.value === time)?.label : undefined;
 
   function goTo(next: StepNumber) {
     setStep(next);
@@ -39,6 +38,11 @@ export function BookingFlow({ services }: { services: readonly Service[] }) {
   }
 
   function chooseService(slug: string) {
+    // Free times depend on the reading's length, so a new reading clears the time.
+    if (slug !== serviceSlug) {
+      setTime(undefined);
+      setTimeLabel(undefined);
+    }
     setServiceSlug(slug);
     const chosen = services.find((s) => s.slug === slug);
     // Keep the format if the new reading offers it.
@@ -56,6 +60,7 @@ export function BookingFlow({ services }: { services: readonly Service[] }) {
   function chooseDate(next: Date | undefined) {
     setDate(next);
     setTime(undefined);
+    setTimeLabel(undefined);
   }
 
   const stepTitles: Record<StepNumber, string> = {
@@ -85,12 +90,16 @@ export function BookingFlow({ services }: { services: readonly Service[] }) {
             />
           ) : null}
 
-          {step === 2 ? (
+          {step === 2 && serviceSlug ? (
             <StepTime
+              serviceSlug={serviceSlug}
               date={date}
               time={time}
               onDate={chooseDate}
-              onTime={setTime}
+              onTime={(value, label) => {
+                setTime(value);
+                setTimeLabel(label);
+              }}
               onBack={() => goTo(1)}
               onNext={() => goTo(3)}
             />

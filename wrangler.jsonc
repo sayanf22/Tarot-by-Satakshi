@@ -4,11 +4,12 @@
   "main": "worker/index.ts",
   // Matches the installed workerd runtime (1.20261023.x).
   "compatibility_date": "2026-10-23",
+  "send_metrics": false,
   // Builds the static site before deploy, so ./out exists on Workers Builds.
-  // Skipped for `wrangler dev` (see the script).
+  // Skipped for `wrangler dev`, and when the dashboard build already made ./out (see the script).
   "build": {
     "command": "node scripts/cf-build.mjs",
-    "watch_dir": "scripts"
+    "watch_dir": "scripts",
   },
   "assets": {
     // Next.js static export output.
@@ -16,11 +17,31 @@
     "binding": "ASSETS",
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash",
-    // Only API requests run the Worker; every page is a free static asset.
-    "run_worker_first": ["/api/*"]
+    // Only API requests and uploaded images run the Worker; every page is a free static asset.
+    "run_worker_first": ["/api/*", "/media/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tarot-by-satakshi-db",
+      "database_id": "8c4f21de-d46d-40a8-bc18-d9bf93a5395c",
+      "migrations_dir": "migrations",
+    },
+  ],
+  // Image storage (R2) is added here once R2 is turned on for the account:
+  // "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "tarot-by-satakshi-media" }]
+  // Settings that are not secret. Secrets (API keys, salts) are set with
+  // `wrangler secret put` or in the dashboard, never in this file.
+  "vars": {
+    // Cloudflare Access for the admin. Empty means admin sign-in is off (every admin call is refused).
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    "ADMIN_EMAILS": "tarotwithsatakshi@gmail.com",
+    // Where enquiry and booking emails go, and the sender once Resend is set up.
+    "NOTIFY_EMAIL": "tarotwithsatakshi@gmail.com",
+    "EMAIL_FROM": "",
   },
   "observability": {
-    "enabled": true
-  }
-  // D1, R2, secrets and the cron trigger are added in phase 4 (backend).
+    "enabled": true,
+  },
 }

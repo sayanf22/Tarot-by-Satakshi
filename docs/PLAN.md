@@ -384,9 +384,9 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 | 2c Home redesign | **Done** | Hero of four tarot cards dealt from the centre that turn face up (tap to turn again); crossing word ribbons; "Meet Satakshi" with her two photos and a turning badge; readings as a fanned deck of flip cards; topics as a line of words; drawn four-step timeline; one black session panel; open FAQ list. Photos: originals in `image/` (not deployed), web versions made by `node scripts/process-photos.mjs` (watermark strip cropped, metadata removed, 480/800/1200 px WebP) |
 | 2 Public pages (sample data) | **Done** | Home, About, Services (with FAQ), Book (4 steps, Pay disabled), `/book/status`, Contact, 404. Legal pages wait for policy text; sitemap and share image wait for the domain |
 | 3 Admin UI (mock data) | | All admin screens |
-| 4 Backend foundation | | Migrations, API, validation, headers, CSP |
-| 5 Booking engine | | Slots, holds, overlap guard |
-| 6 Admin API | | Access check, editing, uploads, rebuild hook |
+| 4 Backend foundation | **Done** (CSP still to do) | D1 `tarot-by-satakshi-db` (APAC) with `migrations/0001_init.sql` applied locally and remotely; Hono routes in `worker/routes/`; shared Zod schemas; same-origin check, JSON size limit and D1 rate limits (salted IP hash, secret `RATE_LIMIT_SALT`); `/api/contact` saves to `enquiries` and emails via Resend once configured |
+| 5 Booking engine | **Done** (no payment yet) | `/api/slots` from weekly hours, overrides, notice and window; `/api/bookings` creates a 15-minute hold; 15-minute `booking_slot_units` primary key blocks double booking (tested with two simultaneous requests: 201 and 409); `/api/bookings/:ref` status. The booking page now shows real free times |
+| 6 Admin API | **Done** (Access not yet set up) | `/api/admin/*`: bookings, enquiries, services, hours, overrides, settings, image upload/delete. Every call checks the Cloudflare Access JWT (signature, issuer, audience, expiry, admin email); refused with 503 until `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are set. Images: JPEG/PNG/WebP by magic bytes, 5 MB max, random keys, served from `/media/*`; needs R2 turned on and the `MEDIA` binding |
 | 7 Payments (sandbox) | | Gateway adapter and tests |
 | 8 Emails and content | | Resend templates, DNS, real copy and photos |
 | 9 Security and free-plan check | | Full test pass, CPU per endpoint |

@@ -11,8 +11,8 @@ import { contactSchema, type ContactInput } from "@/lib/validation/contact";
 
 type Status = "idle" | "sent" | "error";
 
-// Posts to /api/contact. The Worker route (with Turnstile and email to Satakshi)
-// is built in phase 4; until then a submit shows the error state with her contact details.
+// Posts to /api/contact. The Worker saves the message in D1 (admin inbox) and
+// emails Satakshi once Resend is set up. If it fails, her contact details are shown.
 export function ContactForm() {
   const [status, setStatus] = useState<Status>("idle");
   const {
