@@ -21,6 +21,8 @@ export type Service = {
   sample?: boolean;
   /** Set by the API: has a real price and length, so it can be paid for online. */
   bookable?: boolean;
+  /** Photo chosen in the admin, served from the MEDIA databases (`/media/<key>`). */
+  image?: string;
 };
 
 export const categoryLabels: Record<ServiceCategory, string> = {

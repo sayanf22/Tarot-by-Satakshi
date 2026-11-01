@@ -165,7 +165,7 @@ All contrast values were calculated with the WCAG formula. Two gold utilities in
 | Route | Purpose |
 |---|---|
 | `/book/status` | Payment result: confirmed, processing, failed or expired |
-| `/pricing` | Razorpay's "Pricing details" page: every reading with a price, in INR, from the admin plans. Shows a "Prices are being added" note until plans are published |
+| `/pricing` | Razorpay's "Pricing details" page: every reading with a price, in INR, with its photo (never cropped). Built with the plans saved at build time, then refreshed in the browser from `/api/services`, so price changes in the admin show without a rebuild. Shows a "Prices are being added" note when no plan has a price |
 | `/terms`, `/privacy`, `/refund-policy`, `/shipping-policy` | Legal pages for Razorpay approval, in one text layout (`components/legal/legal-page.tsx`). Drafted from Razorpay's list and the Consumer Protection (E-Commerce) Rules, 2020; Satakshi confirms the wording. Linked from the footer and the checkout checkbox |
 | `404`, `sitemap.xml`, `robots.txt`, share image, favicon | System files |
 
@@ -452,3 +452,23 @@ Open questions for Satakshi are sent to her on WhatsApp.
 - Access token validation: https://developers.cloudflare.com/access/setting-up-access/validate-jwt-tokens/
 - Cashfree: https://www.cashfree.com/docs/payments/online/web/redirect, https://www.cashfree.com/docs/payments/online/webhooks/signature-verification, https://www.cashfree.com/docs/payments/online/go-live/whitelist
 - Razorpay: https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/integration-steps/, https://razorpay.com/docs/webhooks/validate-test/, https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/best-practices/
+
+### Plans and photos added on 2 November 2026
+
+Four plans from Satakshi's earlier booking page (names, prices and lengths from the screenshots the user sent), all editable in the admin under Plans:
+
+| Plan | Price | Length | Session | Photo |
+|---|---|---|---|---|
+| Tarot – 1 question | ₹222 | 10 min | Call or text | Three-card spread with candles |
+| Tarot reading | ₹890 | 10 min | Call or text | Three-card spread |
+| Tarot – 10 questions | ₹1,888 | 10 min | Call or text | Celtic cross spread |
+| Consultation call | ₹777 | 15 min | Call | Three-card spread (same image, stored once) |
+
+Photos, all CC0 (no attribution required) by Nosferattus on Wikimedia Commons, re-encoded as WebP (longest side 1,000 px, quality 75, metadata removed, not cropped):
+- `File:Tarot cards - 3 card spread.jpg`: 2.27 MB → 102 KB, in MEDIA_1
+- `File:Tarot cards - 3 card spread with candles.jpg`: 1.86 MB → 75 KB, in MEDIA_2
+- `File:Tarot cards - Celtic cross spread.jpg`: 2.71 MB → 126 KB, in MEDIA_3
+
+Loaded with the D1 import API (admin sign-in needs Resend, which isn't set up yet). Note for future bulk loads: `data || X'…'` turns a BLOB into TEXT in SQLite, so chunked image SQL must end with `CAST(data AS BLOB)`. `/media/<key>` keeps an edge copy for a day, so a wrong first response needs a new key, not just a fix in place.
+
+Not added yet, waiting on a decision: the spell, ritual, healing, package and recorded-content items from the old page (see the chat of 2 November 2026).
