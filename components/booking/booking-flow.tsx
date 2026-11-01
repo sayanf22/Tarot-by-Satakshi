@@ -19,7 +19,7 @@ export function BookingFlow({ services: built }: { services: readonly Service[] 
   const [paymentsOn, setPaymentsOn] = useState(false);
   useEffect(() => {
     void api<{ services: Service[] }>("/api/services").then((r) => {
-      if (r.ok && r.data.services.length) setServices(r.data.services);
+      if (r.ok) setServices(r.data.services);
     });
     void api<{ payments: boolean }>("/api/config").then((r) => setPaymentsOn(r.ok && r.data.payments));
   }, []);

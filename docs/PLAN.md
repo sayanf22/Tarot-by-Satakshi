@@ -25,7 +25,7 @@ Sources: `docs/agreement.txt` (the contract, which governs), `docs/quotation.txt
 
 | Topic | Answer | Effect on the build |
 |---|---|---|
-| Services and plans | She'll write the categories and services on paper and explain them | **Open.** The site uses clearly marked sample services in `content/services.ts` until her list arrives |
+| Services and plans | She'll write the categories and services on paper and explain them | **Open.** No sample plans: until she adds plans in the admin, the pages show a "readings coming soon" notice |
 | Session format | Call and text sessions; she contacts the client once booked | Booking step 1 asks Call or Text. The FAQ says she connects after booking |
 | Hours | Monday to Saturday, 11 am – 9 pm | Default availability; shown in the footer, FAQ and Contact page |
 | Booking flow | Approved | As in section 6 |
@@ -287,14 +287,14 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 
 ## 10. Security
 
-**Admin login (changed 1 November 2026):** Cloudflare Access and R2 both need a payment card on the account, so the admin signs in at `/admin` with a login ID (`ADMIN_LOGIN_ID` var), a password and a 6-digit authenticator code (`ADMIN_TOTP_SECRET`, RFC 6238).
-- First password: the `ADMIN_PASSWORD` secret. **Account > Change password** (current password + new password + fresh code) stores PBKDF2-SHA256 (20,000 rounds, about 5 ms) of HMAC(`PASSWORD_PEPPER`, password) in `admin_account`, and signs out every other device. Forgotten password: set a new `ADMIN_PASSWORD` secret; the stored hash's fingerprint no longer matches, so the new secret works.
-- Lockout: 5 failures in 15 minutes per IP, or 30 from anywhere. Preview URLs are off (`preview_urls: false`), and plain-HTTP API/image requests redirect to HTTPS.
-- Compared in constant time; no password hashing, so it stays far inside the 10 ms CPU limit.
-- Each code works once (last used step stored in `settings`); 5 tries a minute per IP (Rate Limiting binding); lockout after 10 failures in 15 minutes from anywhere (`LOGS.login_attempts`).
-- Session: random 32-byte token in a `__Host-tbs_admin` cookie (HttpOnly, Secure, SameSite=Strict, 12 hours); only its SHA-256 is stored in `admin_sessions`. Sign out, or sign out on all devices.
+**Admin sign-in (changed 2 November 2026): email code, no password.** Cloudflare Access needs a payment card, so the Worker sends its own one-time codes through Resend.
+- Only addresses in `ADMIN_EMAILS` (wrangler.jsonc) can sign in; any other address gets the same reply and no email. `ADMIN_EMAILS` is re-checked on every request, so removing an address ends its sessions.
+- Code: 6 digits, valid 10 minutes, works once, 5 tries. Only an HMAC of it (`RATE_LIMIT_SALT`) is stored, in `admin_login_codes`. A new code cancels the last one; at most 5 codes an hour per address.
+- Lockout: 10 failures in 15 minutes per IP, or 30 from anywhere (`LOGS.login_attempts`), plus the `RL_LOGIN` rate limiter. Preview URLs are off (`preview_urls: false`), and plain-HTTP API/image requests redirect to HTTPS.
+- Needs `RESEND_API_KEY` (secret), `EMAIL_FROM` (var) and `RATE_LIMIT_SALT`; without them `/admin` says sign-in isn't set up.
+- Session: random 32-byte token in a `__Host-tbs_admin` cookie (HttpOnly, Secure, SameSite=Strict, 3 days); only its SHA-256 is stored in `admin_sessions`. Sign out, or sign out on all devices.
 - Every admin change also needs a same-origin request, and is written to `LOGS.audit_log`.
-- The `workers.dev` and preview URLs are off in production, so Access can't be bypassed through another hostname.
+- Preview URLs are off. The `workers.dev` address stays on until the custom domain is connected; it runs the same checks.
 
 **Inputs and requests**
 - Zod validation on every input, with the same schemas in the browser and the Worker. Only `prepare().bind()` queries.
@@ -315,9 +315,9 @@ Money is stored in paise. Each booking keeps a copy of the service as it was at 
 - HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors 'none'`.
 - Fonts are self-hosted.
 
-**Uploads (D1, not R2):** admin only. The browser (`lib/image-compress.ts`) re-encodes each photo as WebP at quality 0.9 (visually lossless; PNG graphics also tried lossless), longest side up to 2,400 px with step-down resizing, camera rotation applied and GPS/camera metadata removed, never cropped, so it fits one D1 row (2 MB limit). The Worker checks the real type from the file's first bytes (JPEG, PNG, WebP; SVG refused), stores the bytes in the least-full of `MEDIA_1..4` (4 × 500 MB = 2 GB) under a random key, and indexes it in `media`. Served from `/media/<key>` with `nosniff`, a sandbox CSP and long caching.
+**Uploads (D1, not R2):** admin only. The browser (`lib/image-compress.ts`) re-encodes each photo as WebP at quality 0.9 (visually lossless; PNG graphics also tried lossless), longest side up to 2,400 px with step-down resizing, camera rotation applied and GPS/camera metadata removed, never cropped, so it fits one D1 row (2 MB limit). The Worker checks the real type from the file's first bytes (JPEG, PNG, WebP; SVG refused), hashes the bytes (SHA-256, `media.content_hash UNIQUE`), so an image already saved is reused instead of stored twice, then stores only the key and bytes in the least-full of `MEDIA_1..8` (each capped at 480 MB, about 3.75 GB in total). Type, size and hash are kept once, in the core `media` index. Deleting a plan deletes the plan and its image (bytes, index row, edge cache) unless another plan uses the same image; past bookings keep their own copy of the plan (`service_snapshot`, `service_id` set to NULL). Served from `/media/<key>` with `nosniff`, a sandbox CSP and long caching.
 
-**Databases (free plan: 10 × 500 MB, 5 GB total):** `DB` (plans, hours, bookings, payments, messages, sessions), `LOGS` (email, audit, payment events, sign-in attempts; pruned after a year), `MEDIA_1..4` (image bytes). Four slots are left free for later. Migrations live in `migrations/core`, `migrations/logs`, `migrations/media`. D1 Time Travel gives 7 days of point-in-time restore on the free plan.
+**Databases (free plan: 10 × 500 MB, 5 GB total), all 10 used:** `DB` (plans, hours, bookings, payments, messages, sessions, sign-in codes), `LOGS` (email, audit, payment events, sign-in attempts), `MEDIA_1..8` (image bytes only). Pruned hourly by the cron: unpaid lapsed holds after 2 days, sign-in codes and attempts after 1 day, `email_log` after 90 days, `payment_events` and `audit_log` after a year. Migrations live in `migrations/core`, `migrations/logs`, `migrations/media`. D1 Time Travel gives 7 days of point-in-time restore on the free plan.
 
 **Payments (Razorpay Standard Checkout):** the amount always comes from D1, never the browser. `POST /api/bookings` holds the time (15 minutes) and creates the order; Checkout returns `payment_id`, `order_id`, `signature`; `POST /api/payments/verify` checks HMAC-SHA256(`order_id|payment_id`) with the key secret in constant time, using our own order id, then fetches the payment from Razorpay and confirms only if it is captured for exactly our order, amount and currency (authorized payments are captured). `POST /api/payments/webhook` verifies `X-Razorpay-Signature` over the raw body and settles the same way, so a closed browser still confirms. Settling is idempotent. A late payment re-claims the time if it's still free; if another client took it, the full amount is refunded automatically. A cron every 10 minutes releases lapsed holds, asks Razorpay about recent unpaid orders (missed webhooks), and prunes old data. The admin can refund a paid booking (locked first, so it can't refund twice).
 

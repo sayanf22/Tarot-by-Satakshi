@@ -1,88 +1,153 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppContext } from "../env";
-import {
-  hashPassword,
-  hmacSha256Hex,
-  newSalt,
-  PASSWORD_ITERATIONS,
-  randomToken,
-  safeEqual,
-  sha256Hex,
-  verifyTotp,
-} from "./crypto";
+import { hmacSha256Hex, randomToken, safeEqual, sha256Hex } from "./crypto";
+import { escapeHtml, sendMail } from "./email";
 import { clientIp, fail, requireSameOrigin } from "./http";
 
-// Admin sign-in without Cloudflare Access (which needs a card on file):
-// login ID + password + a 6-digit code from an authenticator app (two factors).
-// - The first password is the ADMIN_PASSWORD Worker secret. "Change password" in the
-//   admin stores a peppered PBKDF2 hash in D1 instead (see migrations/core/0003).
-// - Forgotten password: set a new ADMIN_PASSWORD secret in the Cloudflare dashboard;
-//   the stored hash no longer matches its fingerprint, so the new secret works.
-// - Each code works once (last used step stored), so a seen code can't be replayed.
-// - 5 tries a minute per IP (rate-limit binding); 5 failures in 15 minutes locks that
-//   IP out, and 30 failures from anywhere locks sign-in for 15 minutes.
-// - Session: random token in a __Host- cookie (HttpOnly, Secure, SameSite=Strict);
-//   only its SHA-256 is stored, so a database leak gives no session.
+// Admin sign-in by emailed one-time code (Resend). No passwords.
+// 1. The admin enters her email. If it's on ADMIN_EMAILS, a random 6-digit code is
+//    emailed. The reply is the same either way, so nobody can test which emails work.
+// 2. She enters the code. It expires after 10 minutes, works once, and allows 5 tries;
+//    a new code cancels the old one. Only an HMAC of the code is stored.
+// 3. A session is a random token in a __Host- cookie (HttpOnly, Secure,
+//    SameSite=Strict); only its SHA-256 is stored, so a database leak gives no session.
+// Limits: 5 requests a minute per IP (rate-limit binding), 5 codes an hour per email,
+// and 10 wrong codes in 15 minutes from one IP (30 from anywhere) locks sign-in.
 
 export const SESSION_COOKIE = "__Host-tbs_admin";
-const SESSION_MS = 12 * 60 * 60 * 1000;
+const SESSION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const CODE_MS = 10 * 60 * 1000;
+const CODE_TRIES = 5;
+const CODES_PER_HOUR = 5;
 const WINDOW_MS = 15 * 60 * 1000;
-const IP_FAILURES = 5;
+const IP_FAILURES = 10;
 const GLOBAL_FAILURES = 30;
-export const ADMIN_ACTOR = "admin";
-export const MIN_PASSWORD = 12;
 
-export function adminConfigured(c: Context<AppContext>) {
-  return Boolean(
-    c.env.ADMIN_PASSWORD &&
-    c.env.ADMIN_PASSWORD.length >= 16 &&
-    c.env.ADMIN_TOTP_SECRET &&
-    c.env.PASSWORD_PEPPER,
-  );
+export function adminEmails(c: Context<AppContext>) {
+  return c.env.ADMIN_EMAILS.split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
 }
 
-export function loginId(c: Context<AppContext>) {
-  return c.env.ADMIN_LOGIN_ID.trim().toLowerCase();
+export function adminConfigured(c: Context<AppContext>) {
+  return Boolean(c.env.RESEND_API_KEY && c.env.EMAIL_FROM && c.env.RATE_LIMIT_SALT && adminEmails(c).length);
 }
 
 async function ipHash(c: Context<AppContext>) {
-  return (await sha256Hex(`${c.env.RATE_LIMIT_SALT ?? "dev"}:${clientIp(c)}`)).slice(0, 32);
+  return (await sha256Hex(`${c.env.RATE_LIMIT_SALT}:${clientIp(c)}`)).slice(0, 32);
 }
 
-async function secretFingerprint(c: Context<AppContext>) {
-  return hmacSha256Hex(c.env.PASSWORD_PEPPER!, `fingerprint:${c.env.ADMIN_PASSWORD}`);
+function codeHash(c: Context<AppContext>, id: string, code: string) {
+  return hmacSha256Hex(c.env.RATE_LIMIT_SALT!, `login-code:${id}:${code}`);
 }
 
-/** Checks a password against the D1 hash (if current) or the ADMIN_PASSWORD secret. */
-async function passwordMatches(c: Context<AppContext>, password: string) {
-  const row = await c.env.DB.prepare(
-    "SELECT password_hash, password_salt, iterations, secret_fingerprint FROM admin_account WHERE id = 1",
-  ).first<{ password_hash: string; password_salt: string; iterations: number; secret_fingerprint: string }>();
-  if (row && (await safeEqual(row.secret_fingerprint, await secretFingerprint(c)))) {
-    const hash = await hashPassword(password, c.env.PASSWORD_PEPPER!, row.password_salt, row.iterations);
-    return safeEqual(hash, row.password_hash);
+/** Uniformly random 6-digit code (rejection sampling, no modulo bias). */
+function sixDigits() {
+  for (;;) {
+    const n = crypto.getRandomValues(new Uint32Array(1))[0]!;
+    if (n < 4_294_000_000) return String(n % 1_000_000).padStart(6, "0");
   }
-  return safeEqual(password, c.env.ADMIN_PASSWORD!);
 }
 
-/** Uses up a TOTP step so the same code can't be used again. */
-async function consumeStep(c: Context<AppContext>, step: number) {
-  const res = await c.env.DB.prepare(
-    "UPDATE settings SET value = ?1 WHERE key = 'totp_last_step' AND CAST(value AS INTEGER) < ?1",
-  )
-    .bind(step)
-    .run();
-  return res.meta.changes > 0;
+async function lockedOut(c: Context<AppContext>, ip: string) {
+  const since = Date.now() - WINDOW_MS;
+  const [mine, all] = await c.env.LOGS.batch([
+    c.env.LOGS.prepare(
+      "SELECT count(*) AS n FROM login_attempts WHERE ip_hash = ?1 AND at > ?2 AND ok = 0",
+    ).bind(ip, since),
+    c.env.LOGS.prepare("SELECT count(*) AS n FROM login_attempts WHERE at > ?1 AND ok = 0").bind(since),
+  ]);
+  const n = (r: typeof mine) => (r?.results?.[0] as { n: number } | undefined)?.n ?? 0;
+  return n(mine) >= IP_FAILURES || n(all) >= GLOBAL_FAILURES;
 }
 
-async function startSession(c: Context<AppContext>) {
+/** Step 1: email a code if the address is an admin. Always answers the same. */
+export async function startLogin(c: Context<AppContext>, rawEmail: string) {
+  if (!adminConfigured(c)) fail(503, "Email sign-in isn't set up yet");
+  requireSameOrigin(c);
+  const email = rawEmail.trim().toLowerCase();
+  if (await lockedOut(c, await ipHash(c))) fail(429, "Too many tries. Please wait 15 minutes.");
+  const allowed = adminEmails(c);
+  let isAdmin = false;
+  for (const a of allowed) if (await safeEqual(email, a)) isAdmin = true;
+  if (!isAdmin) return;
+
   const now = Date.now();
+  const recent = await c.env.DB.prepare(
+    "SELECT count(*) AS n FROM admin_login_codes WHERE email = ?1 AND created_at > ?2",
+  )
+    .bind(email, now - 60 * 60 * 1000)
+    .first<{ n: number }>();
+  if ((recent?.n ?? 0) >= CODES_PER_HOUR) return; // quietly stop: no email flood
+
+  const id = randomToken(12);
+  const code = sixDigits();
+  await c.env.DB.batch([
+    // A new code cancels any earlier unused one.
+    c.env.DB.prepare("UPDATE admin_login_codes SET used_at = ?1 WHERE email = ?2 AND used_at IS NULL").bind(
+      now,
+      email,
+    ),
+    c.env.DB.prepare(
+      "INSERT INTO admin_login_codes (id, email, code_hash, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+    ).bind(id, email, await codeHash(c, id, code), now, now + CODE_MS),
+  ]);
+  const sent = await sendMail(c.env, {
+    kind: "admin.code",
+    to: email,
+    ref: id,
+    subject: "Your admin sign-in code",
+    html: `<!doctype html><html><body style="margin:0;background:#fdf9f0;font-family:Arial,sans-serif">
+<div style="max-width:480px;margin:0 auto;padding:32px 20px;color:#1e1a14">
+<p style="margin:0;color:#8f6514;font-size:12px;letter-spacing:3px;font-weight:bold">TAROT BY SATAKSHI · ADMIN</p>
+<h1 style="font-family:Georgia,serif;font-weight:normal">Your sign-in code</h1>
+<p style="font-size:34px;letter-spacing:8px;font-weight:bold;margin:20px 0">${escapeHtml(code)}</p>
+<p style="color:#5a5145;line-height:1.6">It works once, for 10 minutes. If you didn't ask for it, ignore this email: nobody can sign in without the code.</p>
+</div></body></html>`,
+  });
+  if (!sent) fail(502, "The sign-in email couldn't be sent. Please check the Resend setup and try again.");
+}
+
+/** Step 2: check the code and start a session. */
+export async function finishLogin(c: Context<AppContext>, rawEmail: string, code: string) {
+  if (!adminConfigured(c)) fail(503, "Email sign-in isn't set up yet");
+  requireSameOrigin(c);
+  const email = rawEmail.trim().toLowerCase();
+  const ip = await ipHash(c);
+  if (await lockedOut(c, ip)) fail(429, "Too many tries. Please wait 15 minutes.");
+  const now = Date.now();
+
+  // Count the try first (atomic), so parallel guesses can't exceed the limit.
+  const row = await c.env.DB.prepare(
+    `UPDATE admin_login_codes SET attempts = attempts + 1
+     WHERE id = (SELECT id FROM admin_login_codes WHERE email = ?1 AND used_at IS NULL AND expires_at > ?2
+                 ORDER BY created_at DESC LIMIT 1)
+       AND attempts < ?3
+     RETURNING id, code_hash`,
+  )
+    .bind(email, now, CODE_TRIES)
+    .first<{ id: string; code_hash: string }>();
+
+  let ok = false;
+  if (row && (await safeEqual(await codeHash(c, row.id, code), row.code_hash))) {
+    const used = await c.env.DB.prepare(
+      "UPDATE admin_login_codes SET used_at = ?1 WHERE id = ?2 AND used_at IS NULL",
+    )
+      .bind(now, row.id)
+      .run();
+    ok = used.meta.changes > 0;
+  }
+  await c.env.LOGS.prepare("INSERT INTO login_attempts (at, ip_hash, ok) VALUES (?1, ?2, ?3)")
+    .bind(now, ip, ok ? 1 : 0)
+    .run();
+  if (!ok) fail(401, "That code is wrong or has expired. Ask for a new one.");
+
   const token = randomToken(32);
   await c.env.DB.prepare(
     "INSERT INTO admin_sessions (token_hash, email, created_at, expires_at) VALUES (?1, ?2, ?3, ?4)",
   )
-    .bind(await sha256Hex(token), ADMIN_ACTOR, now, now + SESSION_MS)
+    .bind(await sha256Hex(token), email, now, now + SESSION_MS)
     .run();
   setCookie(c, SESSION_COOKIE, token, {
     path: "/",
@@ -91,91 +156,7 @@ async function startSession(c: Context<AppContext>) {
     sameSite: "Strict",
     maxAge: SESSION_MS / 1000,
   });
-}
-
-export async function login(c: Context<AppContext>, id: string, password: string, code: string) {
-  if (!adminConfigured(c)) fail(503, "Admin sign-in isn't set up yet");
-  requireSameOrigin(c);
-  const now = Date.now();
-  const ip = await ipHash(c);
-
-  const [mine, all] = await c.env.LOGS.batch([
-    c.env.LOGS.prepare(
-      "SELECT count(*) AS n FROM login_attempts WHERE at > ?1 AND ok = 0 AND ip_hash = ?2",
-    ).bind(now - WINDOW_MS, ip),
-    c.env.LOGS.prepare("SELECT count(*) AS n FROM login_attempts WHERE at > ?1 AND ok = 0").bind(
-      now - WINDOW_MS,
-    ),
-  ]);
-  const count = (r: typeof mine) => (r?.results?.[0] as { n: number } | undefined)?.n ?? 0;
-  if (count(mine) >= IP_FAILURES || count(all) >= GLOBAL_FAILURES)
-    fail(429, "Too many failed sign-ins. Please wait 15 minutes.");
-
-  // Every check runs every time, so the response time doesn't reveal which part was wrong.
-  const idOk = await safeEqual(id.trim().toLowerCase(), loginId(c));
-  const passwordOk = await passwordMatches(c, password);
-  const step = await verifyTotp(c.env.ADMIN_TOTP_SECRET!, code, now);
-  const ok = idOk && passwordOk && step !== null && (await consumeStep(c, step));
-
-  await c.env.LOGS.prepare("INSERT INTO login_attempts (at, ip_hash, ok) VALUES (?1, ?2, ?3)")
-    .bind(now, ip, ok ? 1 : 0)
-    .run();
-  if (!ok) fail(401, "That ID, password or code is not right");
-  await startSession(c);
-}
-
-/** Password rules: long, not trivially guessable, not the ID. */
-export function passwordProblem(next: string, id: string) {
-  if (next.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters`;
-  if (next.length > 128) return "Use at most 128 characters";
-  if (next.trim().toLowerCase() === id) return "The password can't be your login ID";
-  if (/^(.)\1+$/.test(next)) return "Don't repeat one character";
-  const common = ["password", "123456", "qwerty", "satakshi", "tarot", "admin", "letmein"];
-  if (
-    common.some(
-      (w) =>
-        next
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, "")
-          .startsWith(w) && next.length < 20,
-    )
-  )
-    return "That password is too easy to guess";
-  return null;
-}
-
-/** Change password: needs the current password and a fresh authenticator code. Signs out every other device. */
-export async function changePassword(c: Context<AppContext>, current: string, next: string, code: string) {
-  const now = Date.now();
-  const currentOk = await passwordMatches(c, current);
-  const step = await verifyTotp(c.env.ADMIN_TOTP_SECRET!, code, now);
-  if (!currentOk || step === null || !(await consumeStep(c, step)))
-    fail(401, "The current password or the code is not right");
-  const problem = passwordProblem(next, loginId(c));
-  if (problem) fail(400, problem);
-  if (await safeEqual(next, current)) fail(400, "Choose a password you haven't used here");
-
-  const salt = newSalt();
-  const hash = await hashPassword(next, c.env.PASSWORD_PEPPER!, salt);
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      `INSERT INTO admin_account (id, password_hash, password_salt, iterations, secret_fingerprint, updated_at)
-       VALUES (1, ?1, ?2, ?3, ?4, ?5)
-       ON CONFLICT (id) DO UPDATE SET password_hash = ?1, password_salt = ?2, iterations = ?3, secret_fingerprint = ?4, updated_at = ?5`,
-    ).bind(hash, salt, PASSWORD_ITERATIONS, await secretFingerprint(c), now),
-    c.env.DB.prepare("DELETE FROM admin_sessions"),
-  ]);
-  await startSession(c);
-}
-
-export async function passwordChangedAt(c: Context<AppContext>) {
-  const row = await c.env.DB.prepare(
-    "SELECT updated_at, secret_fingerprint FROM admin_account WHERE id = 1",
-  ).first<{
-    updated_at: number;
-    secret_fingerprint: string;
-  }>();
-  return row && (await safeEqual(row.secret_fingerprint, await secretFingerprint(c))) ? row.updated_at : null;
+  return email;
 }
 
 export async function logout(c: Context<AppContext>, everywhere = false) {
@@ -190,7 +171,6 @@ export async function logout(c: Context<AppContext>, everywhere = false) {
 
 /** Every /api/admin route except sign-in runs behind this. */
 export const requireAdmin: MiddlewareHandler<AppContext> = async (c, next) => {
-  if (!adminConfigured(c)) fail(503, "Admin sign-in isn't set up yet");
   const token = getCookie(c, SESSION_COOKIE);
   if (!token || token.length < 30 || token.length > 60) fail(401, "Please sign in");
   const row = await c.env.DB.prepare(
@@ -198,8 +178,8 @@ export const requireAdmin: MiddlewareHandler<AppContext> = async (c, next) => {
   )
     .bind(await sha256Hex(token), Date.now())
     .first<{ email: string; expires_at: number }>();
-  if (!row) fail(401, "Please sign in");
-  // Changes must come from the admin page itself.
+  // An address removed from ADMIN_EMAILS loses access at once, even with a live session.
+  if (!row || !adminEmails(c).includes(row.email)) fail(401, "Please sign in");
   if (c.req.method !== "GET" && c.req.method !== "HEAD") requireSameOrigin(c);
   c.set("adminEmail", row.email);
   c.set("sessionExpires", row.expires_at);

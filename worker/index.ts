@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import type { AppContext, AppEnv } from "./env";
 import { maintenance } from "./lib/bookings";
-import { KEY_PATTERN, shardDb } from "./lib/media";
+import { KEY_PATTERN, SHARDS, shardDb } from "./lib/media";
 import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
 
@@ -48,10 +48,7 @@ app.get("/api/health", async (c) => {
   const [db, logs, ...media] = await Promise.all([
     ping(c.env.DB),
     ping(c.env.LOGS),
-    ping(c.env.MEDIA_1),
-    ping(c.env.MEDIA_2),
-    ping(c.env.MEDIA_3),
-    ping(c.env.MEDIA_4),
+    ...Array.from({ length: SHARDS }, (_, i) => ping(shardDb(c.env, i + 1))),
   ]);
   const ok = db && logs && media.every(Boolean);
   return c.json({ ok, db, logs, media: media.filter(Boolean).length }, ok ? 200 : 503);
@@ -69,19 +66,19 @@ app.get("/media/:key", async (c) => {
   const cache = caches.default;
   const hit = await cache.match(c.req.raw);
   if (hit) return hit;
-  const index = await c.env.DB.prepare("SELECT shard FROM media WHERE key = ?1")
+  const index = await c.env.DB.prepare("SELECT shard, content_type FROM media WHERE key = ?1")
     .bind(key)
-    .first<{ shard: number }>();
+    .first<{ shard: number; content_type: string }>();
   if (!index) return c.env.ASSETS.fetch(c.req.raw);
   const blob = await shardDb(c.env, index.shard)
-    .prepare("SELECT content_type, data FROM media_blobs WHERE key = ?1")
+    .prepare("SELECT data FROM media_blobs WHERE key = ?1")
     .bind(key)
-    .first<{ content_type: string; data: number[] | ArrayBuffer }>();
+    .first<{ data: number[] | ArrayBuffer }>();
   if (!blob) return c.env.ASSETS.fetch(c.req.raw);
   const bytes = blob.data instanceof ArrayBuffer ? new Uint8Array(blob.data) : Uint8Array.from(blob.data);
   const res = new Response(bytes, {
     headers: {
-      "Content-Type": blob.content_type,
+      "Content-Type": index.content_type,
       "Cache-Control": "public, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",

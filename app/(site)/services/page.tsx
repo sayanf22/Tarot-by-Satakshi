@@ -5,6 +5,7 @@ import { Reveal } from "@/components/motion/reveal";
 import { AskPanel } from "@/components/sections/ask-panel";
 import { BookingCta } from "@/components/sections/booking-cta";
 import { FaqList } from "@/components/sections/faq-list";
+import { ReadingsSoon } from "@/components/sections/readings-soon";
 import { Container } from "@/components/ui/container";
 import { RuleTitle } from "@/components/ui/rule-title";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -33,6 +34,11 @@ export default function ServicesPage() {
       />
 
       <div className="overflow-x-clip py-20 lg:py-28">
+        {groups.length === 0 ? (
+          <Container>
+            <ReadingsSoon />
+          </Container>
+        ) : null}
         {groups.map((group) => (
           <section
             key={group.category}

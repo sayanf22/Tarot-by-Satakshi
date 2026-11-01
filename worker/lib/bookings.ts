@@ -201,25 +201,31 @@ export async function maintenance(env: AppEnv, ctx: WaitCtx) {
     }
   }
 
-  // Unpaid attempts older than 30 days carry no value; remove them (and their order rows).
-  const old = now - 30 * 24 * 60 * MINUTE;
+  // Pruning runs once an hour (the first run after the hour), not every 10 minutes,
+  // to keep database reads low. Nothing here is needed after these periods:
+  // unpaid holds after 2 days, used or expired sign-in codes and sign-in attempts
+  // after 1 day, email records after 90 days. Payment events and the admin activity
+  // log are kept for a year (payment disputes can come months later).
+  if (new Date(now).getUTCMinutes() >= 10) return;
+  const day = 24 * 60 * MINUTE;
   await db.batch([
     db
       .prepare(
         "DELETE FROM payments WHERE status IN ('created', 'failed') AND booking_id IN (SELECT id FROM bookings WHERE status = 'expired' AND created_at < ?1)",
       )
-      .bind(old),
+      .bind(now - 2 * day),
     db
       .prepare(
         "DELETE FROM bookings WHERE status = 'expired' AND created_at < ?1 AND id NOT IN (SELECT booking_id FROM payments)",
       )
-      .bind(old),
+      .bind(now - 2 * day),
+    db.prepare("DELETE FROM admin_login_codes WHERE created_at < ?1").bind(now - day),
   ]);
-  const yearAgo = now - 365 * 24 * 60 * MINUTE;
+  const yearAgo = now - 365 * day;
   await env.LOGS.batch([
-    env.LOGS.prepare("DELETE FROM login_attempts WHERE at < ?1").bind(now - 24 * 60 * MINUTE),
+    env.LOGS.prepare("DELETE FROM login_attempts WHERE at < ?1").bind(now - day),
+    env.LOGS.prepare("DELETE FROM email_log WHERE created_at < ?1").bind(now - 90 * day),
     env.LOGS.prepare("DELETE FROM payment_events WHERE at < ?1").bind(yearAgo),
-    env.LOGS.prepare("DELETE FROM email_log WHERE created_at < ?1").bind(yearAgo),
     env.LOGS.prepare("DELETE FROM audit_log WHERE at < ?1").bind(yearAgo),
   ]);
 }

@@ -21,6 +21,7 @@ import { Reveal } from "@/components/motion/reveal";
 import { SplitWords } from "@/components/motion/split-words";
 import { AskPanel } from "@/components/sections/ask-panel";
 import { FaqList } from "@/components/sections/faq-list";
+import { ReadingsSoon } from "@/components/sections/readings-soon";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { RuleTitle } from "@/components/ui/rule-title";
@@ -131,7 +132,7 @@ export default function HomePage() {
         <Container>
           <RuleTitle eyebrow="Readings" title="Choose your reading" />
           <div className="mt-12 lg:mt-14">
-            <ReadingsDeck services={services} />
+            {services.length ? <ReadingsDeck services={services} /> : <ReadingsSoon />}
           </div>
         </Container>
       </section>

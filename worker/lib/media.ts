@@ -1,17 +1,29 @@
 import type { AppEnv } from "../env";
+import { sha256Hex } from "./crypto";
 
-// Images live in D1 instead of R2 (R2 needs a card on file). Four MEDIA databases
-// give 4 × 500 MB = 2 GB. The core database keeps a small index (key → shard), and
-// each upload goes to the shard with the most room left.
+// Images live in D1 instead of R2 (R2 needs a card on file). Eight MEDIA databases
+// hold the bytes (8 × 480 MB ≈ 3.75 GB). The core database keeps a small index
+// (key → shard, size, hash). Each upload goes to the shard with the most room left.
+// The same picture uploaded twice is stored once (matched by its SHA-256).
 
 export const MAX_IMAGE_BYTES = 1_900_000; // D1 allows 2 MB per row
-const SHARD_CAP_BYTES = 480 * 1024 * 1024; // leave headroom below 500 MB
+export const SHARDS = 8;
+const SHARD_CAP_BYTES = 480 * 1024 * 1024; // headroom below the 500 MB database limit
 export const KEY_PATTERN = /^[A-Za-z0-9_-]{16,40}\.(jpg|png|webp)$/;
 
 export type ImageType = "image/jpeg" | "image/png" | "image/webp";
 
 export function shardDb(env: AppEnv, shard: number): D1Database {
-  const dbs = [env.MEDIA_1, env.MEDIA_2, env.MEDIA_3, env.MEDIA_4];
+  const dbs = [
+    env.MEDIA_1,
+    env.MEDIA_2,
+    env.MEDIA_3,
+    env.MEDIA_4,
+    env.MEDIA_5,
+    env.MEDIA_6,
+    env.MEDIA_7,
+    env.MEDIA_8,
+  ];
   const db = dbs[shard - 1];
   if (!db) throw new Error("bad shard");
   return db;
@@ -28,7 +40,16 @@ export function sniffImage(bytes: Uint8Array): { type: ImageType; ext: string } 
   return null;
 }
 
-/** The shard with the most free room, or null when all are full. */
+export function contentHash(bytes: Uint8Array) {
+  return sha256Hex(bytes);
+}
+
+/** An image with these exact bytes already stored, if any. */
+export async function findDuplicate(env: AppEnv, hash: string) {
+  return env.DB.prepare("SELECT key FROM media WHERE content_hash = ?1").bind(hash).first<{ key: string }>();
+}
+
+/** The shard with the most free room, or null when all are full. One indexed query. */
 export async function pickShard(env: AppEnv, size: number) {
   const { results } = await env.DB.prepare("SELECT shard, sum(size) AS used FROM media GROUP BY shard").all<{
     shard: number;
@@ -37,7 +58,7 @@ export async function pickShard(env: AppEnv, size: number) {
   const used = new Map(results.map((r) => [r.shard, r.used]));
   let best: number | null = null;
   let bestUsed = Infinity;
-  for (const shard of [1, 2, 3, 4]) {
+  for (let shard = 1; shard <= SHARDS; shard++) {
     const u = used.get(shard) ?? 0;
     if (u + size <= SHARD_CAP_BYTES && u < bestUsed) {
       best = shard;
@@ -47,12 +68,23 @@ export async function pickShard(env: AppEnv, size: number) {
   return best;
 }
 
+/**
+ * Deletes an image everywhere: its bytes in the shard, its index row, and the
+ * edge cache copy. Safe to call twice.
+ */
+export async function deleteImage(env: AppEnv, key: string, origin: string) {
+  const row = await env.DB.prepare("SELECT shard FROM media WHERE key = ?1")
+    .bind(key)
+    .first<{ shard: number }>();
+  if (row) await shardDb(env, row.shard).prepare("DELETE FROM media_blobs WHERE key = ?1").bind(key).run();
+  await env.DB.prepare("DELETE FROM media WHERE key = ?1").bind(key).run();
+  await caches.default.delete(new Request(`${origin}/media/${key}`));
+  return Boolean(row);
+}
+
 export async function storageUse(env: AppEnv) {
   const row = await env.DB.prepare(
     "SELECT count(*) AS files, coalesce(sum(size), 0) AS bytes FROM media",
-  ).first<{
-    files: number;
-    bytes: number;
-  }>();
-  return { files: row?.files ?? 0, bytes: row?.bytes ?? 0, capacity: SHARD_CAP_BYTES * 4 };
+  ).first<{ files: number; bytes: number }>();
+  return { files: row?.files ?? 0, bytes: row?.bytes ?? 0, capacity: SHARD_CAP_BYTES * SHARDS };
 }

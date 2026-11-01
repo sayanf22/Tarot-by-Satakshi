@@ -29,14 +29,20 @@ type Mail = {
   attachments?: { filename: string; content: string }[];
 };
 
-/** Sends one email and records the outcome in LOGS.email_log. Never throws. */
-export async function sendMail(env: AppEnv, mail: Mail) {
+/** Local tests only: RESEND_API_BASE on 127.0.0.1 points at a mock. Anything else is ignored. */
+function resendBase(env: AppEnv) {
+  const local = (env as AppEnv & { RESEND_API_BASE?: string }).RESEND_API_BASE;
+  return local && /^http:\/\/127\.0\.0\.1:\d+$/.test(local) ? local : "https://api.resend.com";
+}
+
+/** Sends one email and records the outcome in LOGS.email_log. Never throws; returns true if sent. */
+export async function sendMail(env: AppEnv, mail: Mail): Promise<boolean> {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
     await logEmail(env, mail.kind, mail.to, mail.ref ?? null, "skipped", "Resend is not configured");
-    return;
+    return false;
   }
   try {
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetch(`${resendBase(env)}/emails`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${env.RESEND_API_KEY}`,
@@ -62,8 +68,10 @@ export async function sendMail(env: AppEnv, mail: Mail) {
       res.ok ? "sent" : "failed",
       res.ok ? undefined : `HTTP ${res.status}`,
     );
+    return res.ok;
   } catch {
     await logEmail(env, mail.kind, mail.to, mail.ref ?? null, "failed", "Network error");
+    return false;
   }
 }
 

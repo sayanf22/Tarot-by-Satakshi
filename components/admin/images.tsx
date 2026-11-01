@@ -8,7 +8,14 @@ import { Empty, Notice, PageTitle, Panel, useAdminApi } from "./shared";
 
 type Media = { key: string; content_type: string; size: number; alt: string; created_at: number };
 type Storage = { files: number; bytes: number; capacity: number };
-type Result = { name: string; before: number; after: number; ok: boolean; error?: string };
+type Result = {
+  name: string;
+  before: number;
+  after: number;
+  ok: boolean;
+  error?: string;
+  duplicate?: boolean;
+};
 
 export function AdminImages() {
   const adminApi = useAdminApi();
@@ -42,7 +49,7 @@ export function AdminImages() {
       }
       try {
         const c = await compressImage(file);
-        const r = await adminApi<{ key: string }>(
+        const r = await adminApi<{ key: string; duplicate?: boolean }>(
           `/media?alt=${encodeURIComponent(file.name.replace(/\.[^.]+$/, "").slice(0, 120))}`,
           {
             method: "POST",
@@ -52,7 +59,13 @@ export function AdminImages() {
         );
         done.push(
           r.ok
-            ? { name: file.name, before: file.size, after: c.blob.size, ok: true }
+            ? {
+                name: file.name,
+                before: file.size,
+                after: c.blob.size,
+                ok: true,
+                duplicate: r.data.duplicate,
+              }
             : { name: file.name, before: file.size, after: 0, ok: false, error: r.error },
         );
       } catch {
@@ -124,7 +137,9 @@ export function AdminImages() {
             {results.map((r) => (
               <li key={r.name} className="flex flex-wrap justify-between gap-x-4 gap-y-1">
                 <span className="min-w-0 truncate font-semibold text-ink">{r.name}</span>
-                {r.ok ? (
+                {r.ok && r.duplicate ? (
+                  <span className="text-ink-muted">Already saved, so it wasn't stored again</span>
+                ) : r.ok ? (
                   <span className="text-ink-muted tabular">
                     {formatBytes(r.before)} → {formatBytes(r.after)} (
                     {Math.max(0, Math.round((1 - r.after / r.before) * 100))}% smaller)

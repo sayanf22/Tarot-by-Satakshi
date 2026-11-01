@@ -20,10 +20,10 @@
     // Only API requests and uploaded images run the Worker; every page is a free static asset.
     "run_worker_first": ["/api/*", "/media/*"]
   },
-  // Free plan: 10 databases of 500 MB (5 GB in total). Data is split by purpose:
+  // Free plan: 10 databases of 500 MB (5 GB in total); all 10 are used. Split by purpose:
   // DB = bookings, payments, plans, hours, messages (small, hot);
   // LOGS = email, audit and payment-event records (grows, pruned by the cron);
-  // MEDIA_1..4 = image bytes, 4 × 500 MB = 2 GB for photos (no card needed, unlike R2).
+  // MEDIA_1..8 = image bytes, 8 × 480 MB = 3.75 GB for photos (no card needed, unlike R2).
   "d1_databases": [
     {
       "binding": "DB",
@@ -60,6 +60,30 @@
       "database_name": "tarot-by-satakshi-media-4",
       "database_id": "28cabcbf-3ae7-407e-8403-15a80ed8465f",
       "migrations_dir": "migrations/media"
+    },
+    {
+      "binding": "MEDIA_5",
+      "database_name": "tarot-by-satakshi-media-5",
+      "database_id": "82f4e172-918b-4b0d-a3c9-08061dfd5ce7",
+      "migrations_dir": "migrations/media"
+    },
+    {
+      "binding": "MEDIA_6",
+      "database_name": "tarot-by-satakshi-media-6",
+      "database_id": "11a09c70-27c2-4030-89f7-e3c83f03f8f8",
+      "migrations_dir": "migrations/media"
+    },
+    {
+      "binding": "MEDIA_7",
+      "database_name": "tarot-by-satakshi-media-7",
+      "database_id": "7a0e2eb1-ba29-4dc6-841b-41b826f029ae",
+      "migrations_dir": "migrations/media"
+    },
+    {
+      "binding": "MEDIA_8",
+      "database_name": "tarot-by-satakshi-media-8",
+      "database_id": "0fccdf1d-adbb-4d32-beaa-91544f22146c",
+      "migrations_dir": "migrations/media"
     }
   ],
   // Per-visitor request limits, counted by Cloudflare (no database writes).
@@ -76,7 +100,7 @@
   },
   // Settings that are not secret. Secrets are set in the dashboard (Worker >
   // Settings > Variables and Secrets) or with `wrangler secret put`, never here:
-  // ADMIN_PASSWORD, ADMIN_TOTP_SECRET, PASSWORD_PEPPER, RATE_LIMIT_SALT, TURNSTILE_SECRET,
+  // RATE_LIMIT_SALT, TURNSTILE_SECRET,
   // RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, DEPLOY_HOOK_URL,
   // RESEND_API_KEY.
   // Only the main workers.dev address serves the site. Version preview URLs would
@@ -84,8 +108,8 @@
   "workers_dev": true,
   "preview_urls": false,
   "vars": {
-    // Admin login ID (not secret). The password and authenticator key are secrets.
-    "ADMIN_LOGIN_ID": "tarotwithsatakshi@gmail.com",
+    // Who may sign in to /admin (comma-separated). A one-time code is emailed to them via Resend.
+    "ADMIN_EMAILS": "tarotwithsatakshi@gmail.com",
     // Where booking and enquiry emails go, and the sender once Resend is set up
     // (for example "Tarot by Satakshi <bookings@mail.example.com>").
     "NOTIFY_EMAIL": "tarotwithsatakshi@gmail.com",

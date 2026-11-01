@@ -1,21 +1,22 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../env";
-import {
-  adminConfigured,
-  changePassword,
-  login,
-  loginId,
-  logout,
-  MIN_PASSWORD,
-  passwordChangedAt,
-  requireAdmin,
-} from "../lib/auth";
-import { randomToken } from "../lib/crypto";
+import { adminConfigured, adminEmails, finishLogin, logout, requireAdmin, startLogin } from "../lib/auth";
 import type { ServiceRow } from "../lib/data";
 import { fail, readJson, readText } from "../lib/http";
 import { audit } from "../lib/logs";
-import { KEY_PATTERN, MAX_IMAGE_BYTES, pickShard, shardDb, sniffImage, storageUse } from "../lib/media";
+import {
+  contentHash,
+  deleteImage,
+  findDuplicate,
+  KEY_PATTERN,
+  MAX_IMAGE_BYTES,
+  pickShard,
+  shardDb,
+  sniffImage,
+  storageUse,
+} from "../lib/media";
+import { randomToken } from "../lib/crypto";
 import { refundPayment } from "../lib/razorpay";
 import { rateLimit } from "../lib/rate-limit";
 import { isIsoDate } from "../lib/time";
@@ -26,23 +27,27 @@ function first<T>(r: D1Result<unknown> | undefined) {
   return (r?.results?.[0] ?? {}) as T;
 }
 const actor = (c: { get: (k: "adminEmail") => string }) => c.get("adminEmail");
+const email = z.string().trim().min(3).max(254).pipe(z.email());
 
-// ---- Sign-in (open) ----
+// ---- Sign-in by emailed code (open) ----
 
 adminRoutes.get("/status", (c) => c.json({ configured: adminConfigured(c) }));
 
-adminRoutes.post("/login", async (c) => {
-  await rateLimit(c, "RL_LOGIN", "login");
-  const body = z
-    .object({
-      id: z.string().min(1).max(254),
-      password: z.string().min(1).max(200),
-      code: z.string().regex(/^\d{6}$/),
-    })
-    .safeParse(await readJson(c, 2048));
-  if (!body.success) fail(400, "Enter your ID, password and the 6-digit code");
-  await login(c, body.data.id, body.data.password, body.data.code);
-  await audit(c.env, "admin", "signed_in");
+adminRoutes.post("/login/start", async (c) => {
+  await rateLimit(c, "RL_LOGIN", "login-start");
+  const body = z.object({ email }).safeParse(await readJson(c, 1024));
+  if (!body.success) fail(400, "Enter a valid email address");
+  await startLogin(c, body.data.email);
+  // Same answer whether or not the email is an admin.
+  return c.json({ ok: true });
+});
+
+adminRoutes.post("/login/verify", async (c) => {
+  await rateLimit(c, "RL_LOGIN", "login-verify");
+  const body = z.object({ email, code: z.string().regex(/^\d{6}$/) }).safeParse(await readJson(c, 1024));
+  if (!body.success) fail(400, "Enter the 6-digit code from the email");
+  const who = await finishLogin(c, body.data.email, body.data.code);
+  await audit(c.env, who, "signed_in");
   return c.json({ ok: true });
 });
 
@@ -60,8 +65,7 @@ adminRoutes.post("/logout", async (c) => {
 adminRoutes.get("/me", (c) => c.json({ user: actor(c) }));
 
 adminRoutes.get("/account", async (c) => {
-  const [changed, sessions, recent] = await Promise.all([
-    passwordChangedAt(c),
+  const [sessions, recent] = await Promise.all([
     c.env.DB.prepare("SELECT count(*) AS n FROM admin_sessions WHERE expires_at > ?1")
       .bind(Date.now())
       .first<{ n: number }>(),
@@ -71,30 +75,13 @@ adminRoutes.get("/account", async (c) => {
     }>(),
   ]);
   return c.json({
-    loginId: loginId(c),
-    passwordChangedAt: changed,
+    email: actor(c),
+    admins: adminEmails(c),
     sessionExpires: c.get("sessionExpires"),
     activeSessions: sessions?.n ?? 0,
-    minPassword: MIN_PASSWORD,
     recentSignIns: recent.results,
   });
 });
-
-adminRoutes.post("/password", async (c) => {
-  await rateLimit(c, "RL_LOGIN", "password");
-  const body = z
-    .object({
-      current: z.string().min(1).max(200),
-      next: z.string().min(1).max(200),
-      code: z.string().regex(/^\d{6}$/),
-    })
-    .safeParse(await readJson(c, 2048));
-  if (!body.success) fail(400, "Fill in all three fields");
-  await changePassword(c, body.data.current, body.data.next, body.data.code);
-  await audit(c.env, actor(c), "password.changed");
-  return c.json({ ok: true });
-});
-
 adminRoutes.get("/overview", async (c) => {
   const now = Date.now();
   const ist = new Date(now + 330 * 60_000);
@@ -414,19 +401,29 @@ adminRoutes.patch("/services/:slug", async (c) => {
   return c.json({ ok: true });
 });
 
-/** Deleting is allowed only for plans that were never booked; others can be archived. */
+/**
+ * Deletes a plan completely: the plan row and its photo (bytes, index and cache),
+ * unless another plan uses the same photo. Past and upcoming bookings are kept, as
+ * each booking stores its own copy of the plan (name, length, price) when made;
+ * their link to the deleted plan is cleared by the database (ON DELETE SET NULL).
+ */
 adminRoutes.delete("/services/:slug", async (c) => {
   const slug = c.req.param("slug");
-  const res = await c.env.DB.prepare(
-    "DELETE FROM services WHERE slug = ?1 AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.service_id = services.id)",
-  )
+  const plan = await c.env.DB.prepare("SELECT id, image_key FROM services WHERE slug = ?1")
     .bind(slug)
-    .run();
-  if (!res.meta.changes) fail(409, "This plan has bookings, so it can only be archived");
-  await audit(c.env, actor(c), "plan.delete", slug);
-  return c.json({ ok: true });
+    .first<{ id: number; image_key: string | null }>();
+  if (!plan) fail(404, "Plan not found");
+  await c.env.DB.prepare("DELETE FROM services WHERE id = ?1").bind(plan.id).run();
+  let imageDeleted = false;
+  if (plan.image_key) {
+    const shared = await c.env.DB.prepare("SELECT 1 FROM services WHERE image_key = ?1 LIMIT 1")
+      .bind(plan.image_key)
+      .first();
+    if (!shared) imageDeleted = await deleteImage(c.env, plan.image_key, new URL(c.req.url).origin);
+  }
+  await audit(c.env, actor(c), "plan.delete", slug, imageDeleted ? `image ${plan.image_key}` : "");
+  return c.json({ ok: true, imageDeleted });
 });
-
 // ---- Hours, days off, booking settings ----
 
 const minutes = z.number().int().min(0).max(1440);
@@ -548,27 +545,35 @@ adminRoutes.post("/media", async (c) => {
   if (!buf.byteLength || buf.byteLength > MAX_IMAGE_BYTES) fail(413, "Images must be under 1.9 MB");
   const kind = sniffImage(buf);
   if (!kind || kind.type !== type) fail(415, "Upload a JPEG, PNG or WebP image");
+
+  // Same picture already stored? Reuse it instead of saving a second copy.
+  const hash = await contentHash(buf);
+  const dup = await findDuplicate(c.env, hash);
+  if (dup) return c.json({ key: dup.key, url: `/media/${dup.key}`, duplicate: true });
+
   const shard = await pickShard(c.env, buf.byteLength);
   if (!shard) fail(507 as 503, "Image storage is full. Delete some images first.");
   const key = `${randomToken(15)}.${kind.ext}`;
   const alt = (c.req.query("alt") ?? "").slice(0, 200);
   const now = Date.now();
+  // Bytes go to the shard; the index row (with the unique hash) goes to the core DB.
+  // The shard row carries nothing but the bytes, to keep it as small as possible.
   await shardDb(c.env, shard)
-    .prepare(
-      "INSERT INTO media_blobs (key, content_type, size, data, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-    )
-    .bind(key, kind.type, buf.byteLength, buf, now)
+    .prepare("INSERT INTO media_blobs (key, data) VALUES (?1, ?2)")
+    .bind(key, buf)
     .run();
   try {
     await c.env.DB.prepare(
-      "INSERT INTO media (key, shard, content_type, size, alt, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+      "INSERT INTO media (key, shard, content_type, size, content_hash, alt, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
     )
-      .bind(key, shard, kind.type, buf.byteLength, alt, now)
+      .bind(key, shard, kind.type, buf.byteLength, hash, alt, now)
       .run();
-  } catch (err) {
-    // Keep the two databases in step: undo the blob if the index row failed.
+  } catch {
+    // A parallel upload of the same picture won the race: keep that one, drop ours.
     await shardDb(c.env, shard).prepare("DELETE FROM media_blobs WHERE key = ?1").bind(key).run();
-    throw err;
+    const winner = await findDuplicate(c.env, hash);
+    if (winner) return c.json({ key: winner.key, url: `/media/${winner.key}`, duplicate: true });
+    fail(500, "The image couldn't be saved. Please try again.");
   }
   await audit(c.env, actor(c), "image.upload", key, `${buf.byteLength} bytes`);
   return c.json({ key, url: `/media/${key}` }, 201);
@@ -577,21 +582,14 @@ adminRoutes.post("/media", async (c) => {
 adminRoutes.delete("/media/:key", async (c) => {
   const key = c.req.param("key");
   if (!KEY_PATTERN.test(key)) fail(404, "Image not found");
-  const row = await c.env.DB.prepare("SELECT shard FROM media WHERE key = ?1")
+  const inUse = await c.env.DB.prepare("SELECT name FROM services WHERE image_key = ?1 LIMIT 1")
     .bind(key)
-    .first<{ shard: number }>();
-  if (!row) fail(404, "Image not found");
-  const inUse = await c.env.DB.prepare("SELECT slug FROM services WHERE image_key = ?1 LIMIT 1")
-    .bind(key)
-    .first();
-  if (inUse) fail(409, "A plan uses this image. Change the plan's image first.");
-  await shardDb(c.env, row.shard).prepare("DELETE FROM media_blobs WHERE key = ?1").bind(key).run();
-  await c.env.DB.prepare("DELETE FROM media WHERE key = ?1").bind(key).run();
-  await caches.default.delete(new Request(`${new URL(c.req.url).origin}/media/${key}`));
+    .first<{ name: string }>();
+  if (inUse) fail(409, `The plan "${inUse.name}" uses this image. Change or delete that plan first.`);
+  if (!(await deleteImage(c.env, key, new URL(c.req.url).origin))) fail(404, "Image not found");
   await audit(c.env, actor(c), "image.delete", key);
   return c.json({ ok: true });
 });
-
 // ---- Publish: rebuild the static pages so new or changed plans show everywhere ----
 
 adminRoutes.post("/publish", async (c) => {

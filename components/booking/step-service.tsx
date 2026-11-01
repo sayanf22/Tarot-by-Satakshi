@@ -1,5 +1,6 @@
 import { MessageCircle, PhoneCall } from "lucide-react";
 import { TarotArt } from "@/components/art/tarot-art";
+import { ReadingsSoon } from "@/components/sections/readings-soon";
 import { SampleTag } from "@/components/services/service-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -30,6 +31,8 @@ type Props = {
 export function StepService({ services, serviceSlug, sessionFormat, onService, onFormat, onNext }: Props) {
   const service = services.find((s) => s.slug === serviceSlug);
   const ready = Boolean(service && sessionFormat && service.formats.includes(sessionFormat));
+
+  if (services.length === 0) return <ReadingsSoon />;
 
   return (
     <div className="space-y-12">
