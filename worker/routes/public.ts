@@ -7,6 +7,7 @@ import { settleByPaymentId } from "../lib/bookings";
 import { bookingRef } from "../lib/crypto";
 import {
   activeServices,
+  homeCards,
   bookable,
   bookingSettings,
   freeSlots,
@@ -35,9 +36,9 @@ publicRoutes.get("/config", (c) => c.json({ payments: paymentsConfigured(c.env) 
 
 publicRoutes.get("/services", async (c) => {
   await rateLimit(c, "RL_READ", "services");
-  const services = await activeServices(c.env.DB);
+  const [services, home] = await Promise.all([activeServices(c.env.DB), homeCards(c.env.DB)]);
   c.header("Cache-Control", "public, max-age=30");
-  return c.json({ services: services.map(publicService) });
+  return c.json({ services: services.map(publicService), homeCards: home });
 });
 
 publicRoutes.get("/slots", async (c) => {

@@ -328,13 +328,19 @@ export function AdminPlans() {
   const [images, setImages] = useState<string[]>([]);
   const [editing, setEditing] = useState<{ form: Form; isNew: boolean } | null>(null);
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [home, setHome] = useState<{ value: number; min: number; max: number } | null>(null);
 
   const load = useCallback(async () => {
     const [p, m] = await Promise.all([
-      adminApi<{ services: Plan[] }>("/services"),
+      adminApi<{ services: Plan[]; homeCards: number; homeCardsRange: { min: number; max: number } }>(
+        "/services",
+      ),
       adminApi<{ media: { key: string }[] }>("/media"),
     ]);
-    if (p.ok) setPlans(p.data.services);
+    if (p.ok) {
+      setPlans(p.data.services);
+      setHome({ value: p.data.homeCards, ...p.data.homeCardsRange });
+    }
     if (m.ok) setImages(m.data.media.map((x) => x.key));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -355,6 +361,19 @@ export function AdminPlans() {
     const r = await adminApi(`/services/${p.slug}`, { method: "DELETE" });
     setMsg(r.ok ? { tone: "ok", text: `${p.name} deleted.` } : { tone: "error", text: r.error });
     await load();
+  }
+
+  async function saveHome(value: number) {
+    const r = await adminApi("/home-cards", { method: "PUT", json: { homeCards: value } });
+    setMsg(
+      r.ok
+        ? {
+            tone: "ok",
+            text: `The home page will show ${value} plans. Use Publish to website to update it.`,
+          }
+        : { tone: "error", text: r.error },
+    );
+    if (r.ok) setHome((h) => (h ? { ...h, value } : h));
   }
 
   async function publish() {
@@ -386,6 +405,33 @@ export function AdminPlans() {
         the home and Services pages too.
       </Notice>
       {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
+
+      {home ? (
+        <Panel title="Home page">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <Field
+              id="home-cards"
+              label="Plans in the home page deck"
+              hint={`The first ${home.value} live plans, in order. The Services and Pricing pages always list every plan.`}
+              className="sm:flex-1"
+            >
+              <select
+                id="home-cards"
+                aria-describedby="home-cards-hint"
+                className={inputClasses}
+                value={home.value}
+                onChange={(e) => void saveHome(Number(e.target.value))}
+              >
+                {Array.from({ length: home.max - home.min + 1 }, (_, i) => home.min + i).map((v) => (
+                  <option key={v} value={v}>
+                    {v} plans
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </Panel>
+      ) : null}
 
       {editing ? (
         <Panel title={editing.isNew ? "New plan" : `Edit ${editing.form.name}`}>

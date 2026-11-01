@@ -14,6 +14,29 @@ import type { Service } from "@/lib/types";
 /** Wait this long after the deck moves before a resting mouse turns the new card. */
 const SETTLE_MS = 750;
 
+/**
+ * Only cards this close to the middle are on the page (two each side can show, the
+ * third waits hidden so it can slide in). With 100 plans the deck still holds 7 cards.
+ */
+const MOUNTED = 3;
+/** Dots shown at once; the row slides along as the deck moves. */
+const DOTS = 5;
+/** Width of one dot's slot, in px (the dot or pill sits in the middle of it). */
+const DOT_SLOT = 26;
+
+/** Indexes of the mounted cards around `index`. */
+function windowAround(index: number, n: number) {
+  const out = new Set<number>();
+  for (let d = -MOUNTED; d <= MOUNTED; d++) out.add((((index + d) % n) + n) % n);
+  return out;
+}
+
+/** First dot shown: keeps the current dot inside the row, and the row inside the deck. */
+function dotStart(index: number, n: number) {
+  if (n <= DOTS) return 0;
+  return Math.min(Math.max(index - Math.floor(DOTS / 2), 0), n - DOTS);
+}
+
 /** Distance of card i from the middle card, from -n/2 to n/2 (the deck loops). */
 function offsetOf(i: number, index: number, n: number) {
   let d = (((i - index) % n) + n) % n;
@@ -103,8 +126,10 @@ export function ReadingsDeck({ services }: { services: readonly Service[] }) {
     if (target === index) return;
     const shift = offsetOf(target, index, n);
     const wrapped = new Set<number>();
-    for (let i = 0; i < n; i++) {
-      if (offsetOf(i, target, n) !== offsetOf(i, index, n) - shift) wrapped.add(i);
+    for (const i of windowAround(target, n)) {
+      const before = offsetOf(i, index, n);
+      // Cards that were not mounted, or that wrap round the deck, fade in at their new place.
+      if (Math.abs(before) > MOUNTED || offsetOf(i, target, n) !== before - shift) wrapped.add(i);
     }
     changedAt.current = at;
     setJumping(wrapped);
@@ -142,6 +167,7 @@ export function ReadingsDeck({ services }: { services: readonly Service[] }) {
   }
 
   const active = services[index]!;
+  const start = dotStart(index, n);
 
   return (
     <section aria-roledescription="carousel" aria-label="Readings">
@@ -168,6 +194,7 @@ export function ReadingsDeck({ services }: { services: readonly Service[] }) {
         {services.map((service, i) => {
           const d = offsetOf(i, index, n);
           const abs = Math.abs(d);
+          if (abs > MOUNTED) return null;
           const isActive = d === 0;
           const jump = jumping.has(i);
           return (
@@ -231,24 +258,41 @@ export function ReadingsDeck({ services }: { services: readonly Service[] }) {
 
       <div className="mt-6 flex items-center justify-center gap-5 sm:gap-7">
         <RoundArrow dir="prev" onClick={(at) => go(index - 1, at)} />
-        <div className="flex items-center">
-          {services.map((s, i) => (
-            <button
-              key={s.slug}
-              type="button"
-              onClick={(e) => go(i, e.timeStamp)}
-              aria-label={`Show ${s.name}`}
-              aria-current={i === index ? "true" : undefined}
-              className="group flex h-8 items-center px-1.5"
-            >
-              <span
-                className={cn(
-                  "block h-2 rounded-full transition-all duration-500 ease-soft",
-                  i === index ? "w-8 bg-gold-foil shadow-gold" : "w-2 bg-gold-500 group-hover:bg-gold-600",
-                )}
-              />
-            </button>
-          ))}
+        {/* At most five dots show; the row slides as the deck moves, and a smaller dot
+            at either end means more readings lie that way. */}
+        <div className="overflow-hidden" style={{ width: Math.min(n, DOTS) * DOT_SLOT }}>
+          <div
+            className="flex items-center transition-transform duration-500 ease-soft"
+            style={{ transform: `translateX(${-start * DOT_SLOT}px)` }}
+          >
+            {services.map((s, i) => {
+              const shown = i >= start && i < start + DOTS;
+              const more = (i === start && start > 0) || (i === start + DOTS - 1 && start + DOTS < n);
+              return (
+                <button
+                  key={s.slug}
+                  type="button"
+                  onClick={(e) => go(i, e.timeStamp)}
+                  aria-label={`Show ${s.name}`}
+                  aria-current={i === index ? "true" : undefined}
+                  aria-hidden={shown ? undefined : true}
+                  tabIndex={shown ? undefined : -1}
+                  className="group flex h-8 shrink-0 items-center justify-center"
+                  style={{ width: DOT_SLOT }}
+                >
+                  <span
+                    className={cn(
+                      "block h-2 rounded-full transition-all duration-500 ease-soft",
+                      i === index
+                        ? "w-5 bg-gold-foil shadow-gold"
+                        : "w-2 bg-gold-500 group-hover:bg-gold-600",
+                      more && i !== index && "scale-[0.6] opacity-70",
+                    )}
+                  />
+                </button>
+              );
+            })}
+          </div>
         </div>
         <RoundArrow dir="next" onClick={(at) => go(index + 1, at)} />
       </div>

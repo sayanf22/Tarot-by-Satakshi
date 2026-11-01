@@ -453,22 +453,9 @@ Open questions for Satakshi are sent to her on WhatsApp.
 - Cashfree: https://www.cashfree.com/docs/payments/online/web/redirect, https://www.cashfree.com/docs/payments/online/webhooks/signature-verification, https://www.cashfree.com/docs/payments/online/go-live/whitelist
 - Razorpay: https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/integration-steps/, https://razorpay.com/docs/webhooks/validate-test/, https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/best-practices/
 
-### Plans and photos added on 2 November 2026
+### Plans on the site (changed 2 November 2026)
 
-Four plans from Satakshi's earlier booking page (names, prices and lengths from the screenshots the user sent), all editable in the admin under Plans:
-
-| Plan | Price | Length | Session | Photo |
-|---|---|---|---|---|
-| Tarot – 1 question | ₹222 | 10 min | Call or text | Three-card spread with candles |
-| Tarot reading | ₹890 | 10 min | Call or text | Three-card spread |
-| Tarot – 10 questions | ₹1,888 | 10 min | Call or text | Celtic cross spread |
-| Consultation call | ₹777 | 15 min | Call | Three-card spread (same image, stored once) |
-
-Photos, all CC0 (no attribution required) by Nosferattus on Wikimedia Commons, re-encoded as WebP (longest side 1,000 px, quality 75, metadata removed, not cropped):
-- `File:Tarot cards - 3 card spread.jpg`: 2.27 MB → 102 KB, in MEDIA_1
-- `File:Tarot cards - 3 card spread with candles.jpg`: 1.86 MB → 75 KB, in MEDIA_2
-- `File:Tarot cards - Celtic cross spread.jpg`: 2.71 MB → 126 KB, in MEDIA_3
-
-Loaded with the D1 import API (admin sign-in needs Resend, which isn't set up yet). Note for future bulk loads: `data || X'…'` turns a BLOB into TEXT in SQLite, so chunked image SQL must end with `CAST(data AS BLOB)`. `/media/<key>` keeps an edge copy for a day, so a wrong first response needs a new key, not just a fix in place.
-
-Not added yet, waiting on a decision: the spell, ritual, healing, package and recorded-content items from the old page (see the chat of 2 November 2026).
+- No plans are seeded: the four plans and three photos added earlier were removed from D1 at the user's request. Satakshi adds every plan and photo in the admin.
+- Home page deck: shows the first N live plans in admin order. N is chosen in Admin > Plans > Home page (3 to 12, default 6; stored as `settings.home_cards`, returned by `/api/services` and saved to `content/home.live.json` at build time). A "See all N readings" button links to Services when there are more.
+- The deck mounts at most 7 cards (3 each side of the middle) and shows at most 5 dots; the dot row slides with the deck, and a smaller dot at an end means more lie that way. Tested locally with 104 plans: 7 cards mounted, 5 dots in view, worst frame 17 ms.
+- Services page lists every plan; Pricing lists every plan with a price and refreshes from the live API.

@@ -55,6 +55,17 @@ export async function serviceBySlug(db: D1Database, slug: string) {
     .first<ServiceRow>();
 }
 
+/** How many plans the home page deck shows (the Services page always lists all of them). */
+export const HOME_CARDS = { min: 3, max: 12, fallback: 6 } as const;
+
+export async function homeCards(db: D1Database) {
+  const row = await db
+    .prepare("SELECT value FROM settings WHERE key = 'home_cards'")
+    .first<{ value: string }>();
+  const n = Number(row?.value);
+  return Number.isInteger(n) && n >= HOME_CARDS.min && n <= HOME_CARDS.max ? n : HOME_CARDS.fallback;
+}
+
 export type BookingSettings = {
   slotMinutes: number;
   minNoticeMinutes: number;

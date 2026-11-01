@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../env";
 import { adminConfigured, adminEmails, finishLogin, logout, requireAdmin, startLogin } from "../lib/auth";
-import type { ServiceRow } from "../lib/data";
+import { HOME_CARDS, homeCards, type ServiceRow } from "../lib/data";
 import { fail, readJson, readText } from "../lib/http";
 import { audit } from "../lib/logs";
 import {
@@ -318,7 +318,22 @@ adminRoutes.get("/services", async (c) => {
     `SELECT s.*, (SELECT count(*) FROM bookings b WHERE b.service_id = s.id) AS booking_count
      FROM services s ORDER BY s.archived, s.sort_order, s.id`,
   ).all<ServiceRow & { booking_count: number }>();
-  return c.json({ services: results });
+  return c.json({ services: results, homeCards: await homeCards(c.env.DB), homeCardsRange: HOME_CARDS });
+});
+
+/** How many plans the home page deck shows. The Services page always lists every plan. */
+adminRoutes.put("/home-cards", async (c) => {
+  const body = z
+    .object({ homeCards: z.number().int().min(HOME_CARDS.min).max(HOME_CARDS.max) })
+    .safeParse(await readJson(c));
+  if (!body.success) fail(400, `Choose a number from ${HOME_CARDS.min} to ${HOME_CARDS.max}`);
+  await c.env.DB.prepare(
+    "INSERT INTO settings (key, value) VALUES ('home_cards', ?1) ON CONFLICT (key) DO UPDATE SET value = ?1",
+  )
+    .bind(String(body.data.homeCards))
+    .run();
+  await audit(c.env, actor(c), "settings.home_cards", "", String(body.data.homeCards));
+  return c.json({ ok: true });
 });
 
 adminRoutes.post("/services", async (c) => {

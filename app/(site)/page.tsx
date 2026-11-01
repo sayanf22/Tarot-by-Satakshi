@@ -26,7 +26,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { RuleTitle } from "@/components/ui/rule-title";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { services } from "@/content/services";
+import { homeCards, services } from "@/content/services";
 import { topicCards } from "@/content/topics";
 import { cn } from "@/lib/cn";
 import { site } from "@/lib/site";
@@ -132,7 +132,21 @@ export default function HomePage() {
         <Container>
           <RuleTitle eyebrow="Readings" title="Choose your reading" />
           <div className="mt-12 lg:mt-14">
-            {services.length ? <ReadingsDeck services={services} /> : <ReadingsSoon />}
+            {services.length ? (
+              <>
+                <ReadingsDeck services={services.slice(0, homeCards)} />
+                {services.length > homeCards ? (
+                  <div className="mt-10 flex justify-center">
+                    <ButtonLink href="/services" variant="outline">
+                      See all {services.length} readings
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </ButtonLink>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <ReadingsSoon />
+            )}
           </div>
         </Container>
       </section>
