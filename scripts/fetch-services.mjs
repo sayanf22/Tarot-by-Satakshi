@@ -6,7 +6,7 @@
 // so a build never fails here.
 import { writeFile } from "node:fs/promises";
 
-const origin = process.env.SITE_ORIGIN ?? "https://tarot-by-satakshi.peheltheonlinestore.workers.dev";
+const origin = process.env.SITE_ORIGIN ?? "https://guidancebysatakshi.com";
 
 try {
   const res = await fetch(`${origin}/api/services`, { signal: AbortSignal.timeout(10_000) });

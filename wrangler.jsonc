@@ -110,10 +110,11 @@
   "vars": {
     // Who may sign in to /admin (comma-separated). A one-time code is emailed to them via Resend.
     "ADMIN_EMAILS": "tarotwithsatakshi@gmail.com",
-    // Where booking and enquiry emails go, and the sender once Resend is set up
-    // (for example "Tarot by Satakshi <bookings@mail.example.com>").
+    // Where booking alerts and contact messages go. Client emails reply to this address.
     "NOTIFY_EMAIL": "tarotwithsatakshi@gmail.com",
-    "EMAIL_FROM": ""
+    // Sender for every email. The domain is verified in Resend (DKIM and the send.
+    // return path are in Cloudflare DNS); RESEND_API_KEY can only send from it.
+    "EMAIL_FROM": "Tarot by Satakshi <bookings@guidancebysatakshi.com>"
   },
   "observability": {
     "enabled": true,
