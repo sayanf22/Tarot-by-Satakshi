@@ -34,7 +34,6 @@ type Form = {
   text: boolean;
   duration: string;
   price: string;
-  sample: boolean;
   active: boolean;
   sortOrder: string;
   imageKey: string;
@@ -61,7 +60,6 @@ const blank: Form = {
   text: true,
   duration: "60",
   price: "",
-  sample: false,
   active: true,
   sortOrder: "10",
   imageKey: "",
@@ -79,7 +77,6 @@ function toForm(p: Plan): Form {
     text: p.formats.includes("text"),
     duration: p.duration_min ? String(p.duration_min) : "",
     price: p.price_paise ? String(p.price_paise / 100) : "",
-    sample: p.is_sample === 1,
     active: p.active === 1,
     sortOrder: String(p.sort_order),
     imageKey: p.image_key ?? "",
@@ -114,11 +111,12 @@ function PlanForm({
   async function save(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const price = f.price.trim() ? Math.round(Number(f.price) * 100) : null;
-    const duration = f.duration.trim() ? Number(f.duration) : null;
-    if (price !== null && (!Number.isFinite(price) || price < 100))
-      return setError("Enter a price of at least ₹1, or leave it empty.");
-    if (duration !== null && (!Number.isInteger(duration) || duration < 10 || duration > 240))
+    // Every plan is booked and paid online, so price and length are required.
+    const price = Math.round(Number(f.price) * 100);
+    const duration = Number(f.duration);
+    if (!f.price.trim() || !Number.isFinite(price) || price < 100 || price > 10_000_000)
+      return setError("Enter a price from ₹1 to ₹1,00,000.");
+    if (!Number.isInteger(duration) || duration < 10 || duration > 240)
       return setError("Length must be 10 to 240 minutes.");
     if (!f.call && !f.text) return setError("Choose call, text or both.");
     const body = {
@@ -130,7 +128,6 @@ function PlanForm({
       formats: [f.call && "call", f.text && "text"].filter(Boolean),
       durationMin: duration,
       pricePaise: price,
-      sample: f.sample,
       active: f.active,
       sortOrder: Number(f.sortOrder) || 0,
       imageKey: f.imageKey || null,
@@ -182,10 +179,11 @@ function PlanForm({
           className="min-h-0"
         />
       </Field>
-      <Field id="p-price" label="Price (₹)" hint="Needed for online booking.">
+      <Field id="p-price" label="Price (₹)" hint="Clients pay this online when they book.">
         <TextInput
           id="p-price"
           inputMode="decimal"
+          required
           value={f.price}
           onChange={(e) => set("price", e.target.value.replace(/[^0-9.]/g, ""))}
           aria-describedby="p-price-hint"
@@ -195,6 +193,7 @@ function PlanForm({
         <TextInput
           id="p-duration"
           inputMode="numeric"
+          required
           value={f.duration}
           onChange={(e) => set("duration", e.target.value.replace(/\D/g, ""))}
         />
@@ -295,15 +294,10 @@ function PlanForm({
           />{" "}
           Show on the website
         </label>
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            className="size-4 accent-gold-700"
-            checked={f.sample}
-            onChange={(e) => set("sample", e.target.checked)}
-          />{" "}
-          Sample (not bookable, shows a Sample tag)
-        </label>
+        <p className="text-sm text-ink-muted">
+          Every plan uses the same booking form: the client picks a time, gives their details (birth details
+          too for astrology) and pays online. General questions go through the Contact page.
+        </p>
       </div>
       {error ? (
         <div className="sm:col-span-2">

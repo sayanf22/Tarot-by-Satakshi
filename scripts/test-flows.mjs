@@ -296,6 +296,27 @@ ok(
   ).status === 403,
 );
 
+// ---- Plans must be bookable (price and length required) ----
+const noPrice = await api("/api/admin/services", {
+  method: "POST",
+  cookie,
+  json: {
+    slug: "test-no-price",
+    name: "No price test",
+    category: "tarot",
+    summary: "",
+    icon: "cards",
+    card: "moon",
+    formats: ["call"],
+    durationMin: 30,
+    pricePaise: null,
+    active: true,
+    sortOrder: 99,
+    imageKey: null,
+  },
+});
+ok("a plan without a price is refused", noPrice.status === 400, String(noPrice.status));
+
 // ---- Refund and cancel emails ----
 const before = (await mail()).length;
 const refund = await api(`/api/admin/bookings/${one.ref}/refund`, {

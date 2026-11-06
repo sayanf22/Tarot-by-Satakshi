@@ -308,9 +308,9 @@ const planFields = z.object({
     .array(z.enum(["call", "text"]))
     .min(1)
     .max(2),
-  durationMin: z.number().int().min(10).max(240).nullable(),
-  pricePaise: z.number().int().min(100).max(50_000_000).nullable(),
-  sample: z.boolean(),
+  // Every plan is booked and paid online, so price and length are always required.
+  durationMin: z.number().int().min(10).max(240),
+  pricePaise: z.number().int().min(100).max(10_000_000),
   active: z.boolean(),
   sortOrder: z.number().int().min(0).max(1000),
   imageKey: z.string().regex(KEY_PATTERN).nullable(),
@@ -362,7 +362,7 @@ adminRoutes.post("/services", async (c) => {
         s.formats.join(","),
         s.durationMin,
         s.pricePaise,
-        s.sample ? 1 : 0,
+        0, // no sample plans: every plan is bookable
         s.active ? 1 : 0,
         s.sortOrder,
         s.imageKey,
@@ -394,7 +394,7 @@ adminRoutes.put("/services/:slug", async (c) => {
       s.formats.join(","),
       s.durationMin,
       s.pricePaise,
-      s.sample ? 1 : 0,
+      0, // no sample plans: every plan is bookable
       s.active ? 1 : 0,
       s.sortOrder,
       s.imageKey,
