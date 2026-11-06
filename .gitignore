@@ -39,3 +39,6 @@ Thumbs.db
 
 # Local copy of admin sign-in details (move to a password manager, then delete)
 *.local.txt
+
+# One-off data loads (may hold image bytes); never commit
+.seed/
