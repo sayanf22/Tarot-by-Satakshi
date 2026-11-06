@@ -187,10 +187,7 @@ export function AdminApp() {
   if (auth === "off")
     return (
       <div className="mx-auto max-w-md px-5 pt-16">
-        <Notice>
-          Admin sign-in isn&apos;t set up yet. Sign-in codes are sent by email, so the Worker needs the
-          RESEND_API_KEY secret and an EMAIL_FROM sender address.
-        </Notice>
+        <Notice>Admin sign-in isn&apos;t available right now. Please try again later.</Notice>
       </div>
     );
   if (auth === "out") return <SignIn onDone={() => setAuth("in")} />;

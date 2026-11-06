@@ -124,7 +124,7 @@ export function ContactForm() {
             </p>
           ) : null}
 
-          <TurnstileField ref={turnstile} onToken={setToken} />
+          <TurnstileField ref={turnstile} action="contact" onToken={setToken} />
 
           <Button type="submit" disabled={isSubmitting || !token} className="w-full sm:w-auto">
             {isSubmitting ? "Sending…" : "Send message"}

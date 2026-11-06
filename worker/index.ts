@@ -4,6 +4,7 @@ import { secureHeaders } from "hono/secure-headers";
 import type { AppContext, AppEnv } from "./env";
 import { maintenance } from "./lib/bookings";
 import { KEY_PATTERN, SHARDS, shardDb } from "./lib/media";
+import { rateLimit } from "./lib/rate-limit";
 import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
 
@@ -45,6 +46,8 @@ app.use("/api/*", async (c, next) => {
 
 app.get("/api/health", async (c) => {
   // Confirms each database answers, without exposing anything about them.
+  // Rate-limited like other reads, since each call touches all ten databases.
+  await rateLimit(c, "RL_READ", "health");
   const [db, logs, ...media] = await Promise.all([
     ping(c.env.DB),
     ping(c.env.LOGS),

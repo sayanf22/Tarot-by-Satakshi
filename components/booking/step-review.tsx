@@ -205,7 +205,7 @@ export function StepReview({
             </label>
             {!started ? (
               <div className="mt-5">
-                <TurnstileField ref={turnstile} onToken={setToken} />
+                <TurnstileField ref={turnstile} action="booking" onToken={setToken} />
               </div>
             ) : (
               <output className="mt-5 block rounded-2xl bg-white px-4 py-3 text-sm text-ink">

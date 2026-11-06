@@ -16,7 +16,9 @@
     "lint": "oxlint",
     "format": "prettier --write .",
     "test": "vitest run",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "test:mocks": "node scripts/test-mocks.mjs",
+    "test:flows": "node scripts/test-flows.mjs"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

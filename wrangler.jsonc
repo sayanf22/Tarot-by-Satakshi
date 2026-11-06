@@ -116,7 +116,9 @@
     // return path are in Cloudflare DNS); RESEND_API_KEY can only send from it.
     "EMAIL_FROM": "Tarot by Satakshi <bookings@guidancebysatakshi.com>",
     // Public address used for links inside emails (booking status, policies, admin).
-    "SITE_URL": "https://guidancebysatakshi.com"
+    "SITE_URL": "https://guidancebysatakshi.com",
+    // Hostnames a Turnstile token may come from (production only; no localhost).
+    "TURNSTILE_HOSTNAMES": "guidancebysatakshi.com,www.guidancebysatakshi.com,tarot-by-satakshi.peheltheonlinestore.workers.dev"
   },
   "observability": {
     "enabled": true,

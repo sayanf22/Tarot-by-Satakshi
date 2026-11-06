@@ -56,7 +56,7 @@ publicRoutes.post("/contact", async (c) => {
   requireSameOrigin(c);
   await rateLimit(c, "RL_FORM", "contact");
   const body = (await readJson(c)) as Record<string, unknown>;
-  await verifyTurnstile(c, body?.turnstileToken);
+  await verifyTurnstile(c, body?.turnstileToken, "contact");
   const parsed = contactSchema.safeParse(body);
   if (!parsed.success) fail(400, "Please check the form and try again");
   const v = parsed.data;
@@ -105,7 +105,7 @@ publicRoutes.post("/bookings", async (c) => {
   const input = bookingInput.safeParse(await readJson(c));
   if (!input.success) fail(400, "Please check your booking and try again");
   const b = input.data;
-  await verifyTurnstile(c, b.turnstileToken);
+  await verifyTurnstile(c, b.turnstileToken, "booking");
 
   const service = await serviceBySlug(c.env.DB, b.service);
   if (!service) fail(404, "Reading not found");
