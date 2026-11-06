@@ -67,10 +67,16 @@ createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/emails") {
     const m = JSON.parse(body);
     const key = req.headers["idempotency-key"];
-    // Like Resend: a repeated idempotency key doesn't send again.
-    if (!emails.some((e) => e.key === key))
-      emails.push({ key, ...m, attachments: (m.attachments ?? []).map((a) => a.filename) });
-    return send(res, 200, { id: id("email") });
+    // Like Resend: a repeated idempotency key with the same email doesn't send again;
+    // the same key with a different email is refused (409).
+    const seen = emails.find((e) => e.key === key);
+    if (seen)
+      return seen.body === body
+        ? send(res, 200, { id: seen.id })
+        : send(res, 409, { name: "invalid_idempotent_request" });
+    const sentId = id("email");
+    emails.push({ key, body, id: sentId, ...m, attachments: (m.attachments ?? []).map((a) => a.filename) });
+    return send(res, 200, { id: sentId });
   }
   if (req.method === "GET" && req.url === "/all") return send(res, 200, emails);
   if (req.method === "POST" && req.url === "/clear") {

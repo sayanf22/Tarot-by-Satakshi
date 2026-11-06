@@ -60,16 +60,19 @@ publicRoutes.post("/contact", async (c) => {
   const parsed = contactSchema.safeParse(body);
   if (!parsed.success) fail(400, "Please check the form and try again");
   const v = parsed.data;
+  const now = Date.now();
   const res = await c.env.DB.prepare(
     "INSERT INTO enquiries (name, email, phone, message, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
   )
-    .bind(v.name, v.email, v.phone, v.message, Date.now())
+    .bind(v.name, v.email, v.phone, v.message, now)
     .run();
   c.executionCtx.waitUntil(
     sendMail(c.env, {
       kind: "enquiry",
       to: c.env.NOTIFY_EMAIL,
-      ref: `enquiry-${res.meta.last_row_id}`,
+      // Row ids are reused after a message is deleted, and Resend refuses a reused
+      // idempotency key for 24 hours, so the time is part of the reference.
+      ref: `enquiry-${res.meta.last_row_id}-${now}`,
       replyTo: v.email,
       subject: `New message from ${v.name}`,
       html: layout("New message", [

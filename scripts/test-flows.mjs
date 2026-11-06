@@ -92,6 +92,23 @@ ok(
 );
 ok("admin emailed about the message", enquiryMail?.to[0] === ADMIN);
 ok("admin can reply straight to the sender", enquiryMail?.reply_to?.[0] === CLIENT);
+// A second message must email too, even if an earlier message's id is reused.
+await api("/api/contact", {
+  method: "POST",
+  ip: "10.0.0.5",
+  json: {
+    name: "Mira Again",
+    email: CLIENT,
+    phone: "",
+    message: "Second contact message to check emails don't collide.",
+    turnstileToken: "local",
+  },
+});
+await wait(800);
+ok(
+  "every contact message gets its own email",
+  (await mail()).some((e) => e.subject.startsWith("New message from Mira Again")),
+);
 const cross = await api("/api/contact", {
   method: "POST",
   origin: "https://evil.example",
