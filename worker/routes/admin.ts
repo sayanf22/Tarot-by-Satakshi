@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../env";
 import { adminConfigured, adminEmails, finishLogin, logout, requireAdmin, startLogin } from "../lib/auth";
 import { HOME_CARDS, homeCards, type ServiceRow } from "../lib/data";
+import { sendCancelEmail, sendRefundEmails } from "../lib/email";
 import { fail, readJson, readText } from "../lib/http";
 import { audit } from "../lib/logs";
 import {
@@ -204,6 +205,7 @@ adminRoutes.patch("/bookings/:id", async (c) => {
   }
   if (!res.meta.changes) fail(409, "This booking can't be changed that way");
   await audit(c.env, actor(c), `booking.${action}`, id);
+  if (action === "cancel") c.executionCtx.waitUntil(sendCancelEmail(c.env, id));
   return c.json({ ok: true });
 });
 
@@ -251,6 +253,7 @@ adminRoutes.post("/bookings/:id/refund", async (c) => {
       ),
       c.env.DB.prepare("DELETE FROM booking_slot_units WHERE booking_id = ?1").bind(id),
     ]);
+    c.executionCtx.waitUntil(sendRefundEmails(c.env, id, refund.amount, "admin"));
   } catch (err) {
     await c.env.DB.prepare(
       "UPDATE payments SET status = 'paid' WHERE booking_id = ?1 AND status = 'refund_pending'",

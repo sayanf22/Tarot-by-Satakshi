@@ -1,6 +1,6 @@
 import type { AppEnv } from "../env";
 import { UNIT_MS, unitsFor } from "./data";
-import { sendBookingEmails } from "./email";
+import { sendBookingEmails, sendRefundEmails } from "./email";
 import { audit } from "./logs";
 import {
   capturePayment,
@@ -144,6 +144,7 @@ export async function settlePayment(
         .prepare("UPDATE bookings SET status = 'refunded', updated_at = ?1 WHERE id = ?2")
         .bind(now, booking.id),
     ]);
+    ctx.waitUntil(sendRefundEmails(env, booking.id, refund.amount, "slot_taken"));
   } catch (err) {
     console.error("auto refund failed", err instanceof Error ? err.message : "");
   }
