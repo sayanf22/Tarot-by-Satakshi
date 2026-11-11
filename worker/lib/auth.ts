@@ -103,7 +103,8 @@ export async function startLogin(c: Context<AppContext>, rawEmail: string) {
 <p style="margin:0;color:#8f6514;font-size:12px;letter-spacing:3px;font-weight:bold">TAROT BY SATAKSHI · ADMIN</p>
 <h1 style="font-family:Georgia,serif;font-weight:normal">Your sign-in code</h1>
 <p style="font-size:34px;letter-spacing:8px;font-weight:bold;margin:20px 0">${escapeHtml(code)}</p>
-<p style="color:#5a5145;line-height:1.6">It works once, for 10 minutes. If you didn't ask for it, ignore this email: nobody can sign in without the code.</p>
+<p style="color:#5a5145;line-height:1.6">It works once, for 10 minutes. Only type it on guidancebysatakshi.com/admin. Never share it, read it out on a call or type it on any other website: Tarot by Satakshi and WhyCreatives will never ask you for it.</p>
+<p style="color:#5a5145;line-height:1.6">This email never contains a link. If you didn't ask for a code, ignore it: nobody can sign in without the code.</p>
 </div></body></html>`,
   });
   if (!sent) fail(502, "The sign-in email couldn't be sent. Please check the Resend setup and try again.");
@@ -157,6 +158,36 @@ export async function finishLogin(c: Context<AppContext>, rawEmail: string, code
     maxAge: SESSION_MS / 1000,
   });
   return email;
+}
+
+/**
+ * After every successful sign-in, email that admin with the time and rough location
+ * (Cloudflare's country and city; the IP itself is not stored or sent). If it wasn't
+ * them, "Sign out on all devices" in Account ends every session.
+ */
+export async function sendSignInAlert(c: Context<AppContext>, email: string) {
+  const cf = (c.req.raw as Request & { cf?: { country?: string; city?: string } }).cf;
+  const where = [cf?.city, cf?.country].filter(Boolean).join(", ") || "Unknown";
+  const device = (c.req.header("User-Agent") ?? "Unknown").slice(0, 160);
+  const when = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(Date.now());
+  await sendMail(c.env, {
+    kind: "admin.signin",
+    to: email,
+    ref: `${Date.now()}`,
+    subject: "New sign-in to the admin",
+    html: `<!doctype html><html><body style="margin:0;background:#fdf9f0;font-family:Arial,sans-serif">
+<div style="max-width:480px;margin:0 auto;padding:32px 20px;color:#1e1a14">
+<p style="margin:0;color:#8f6514;font-size:12px;letter-spacing:3px;font-weight:bold">TAROT BY SATAKSHI · ADMIN</p>
+<h1 style="font-family:Georgia,serif;font-weight:normal">New sign-in</h1>
+<p style="line-height:1.6">Your admin account (${escapeHtml(email)}) was just signed in.</p>
+<p style="line-height:1.6">When: ${escapeHtml(when)} IST<br>Where (approximate): ${escapeHtml(where)}<br>Device: ${escapeHtml(device)}</p>
+<p style="color:#5a5145;line-height:1.6">If this was you, nothing to do. If it wasn't, open the admin, go to Account and choose "Sign out everywhere", then tell WhyCreatives.</p>
+</div></body></html>`,
+  });
 }
 
 export async function logout(c: Context<AppContext>, everywhere = false) {

@@ -14,10 +14,11 @@
 /_next/static/*
   Cache-Control: public, max-age=31536000, immutable
 
-# The admin is never indexed or cached.
+# The admin is never indexed or cached, and sends no referrer to other sites.
 /admin
   X-Robots-Tag: noindex, nofollow
   Cache-Control: no-store
+  Referrer-Policy: no-referrer
 
 # Keep the workers.dev preview address out of search results.
 https://:project.:subdomain.workers.dev/*

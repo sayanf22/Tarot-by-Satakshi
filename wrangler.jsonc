@@ -109,7 +109,7 @@
   "preview_urls": false,
   "vars": {
     // Who may sign in to /admin (comma-separated). A one-time code is emailed to them via Resend.
-    "ADMIN_EMAILS": "tarotwithsatakshi@gmail.com",
+    "ADMIN_EMAILS": "tarotwithsatakshi@gmail.com,sayanbanik66@gmail.com",
     // Where booking alerts and contact messages go. Client emails reply to this address.
     "NOTIFY_EMAIL": "tarotwithsatakshi@gmail.com",
     // Sender for every email. The domain is verified in Resend (DKIM and the send.

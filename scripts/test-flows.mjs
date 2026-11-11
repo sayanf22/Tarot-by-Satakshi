@@ -266,7 +266,21 @@ ok(
 );
 await api("/api/admin/login/start", { method: "POST", ip: "10.0.3.2", json: { email: ADMIN } });
 await wait(500);
+const second = await api("/api/admin/login/start", {
+  method: "POST",
+  ip: "10.0.3.3",
+  json: { email: "sayanbanik66@gmail.com" },
+});
+await wait(500);
+ok(
+  "second admin gets a code too",
+  second.status === 200 &&
+    (await mail()).some(
+      (e) => e.to[0] === "sayanbanik66@gmail.com" && e.subject === "Your admin sign-in code",
+    ),
+);
 const code = (await mail())
+  .filter((e) => e.to[0] === ADMIN)
   .toReversed()
   .find((e) => e.subject === "Your admin sign-in code")
   ?.html.match(/>(\d{6})</)?.[1];
@@ -284,6 +298,9 @@ const login = await api("/api/admin/login/verify", {
 });
 const cookie = login.setCookie?.split(";")[0];
 ok("right code signs in", login.status === 200 && cookie?.startsWith("__Host-tbs_admin="));
+await wait(800);
+ok("sign-in alert emailed to the admin", (await mail()).some((e) => e.to[0] === ADMIN && e.subject === "New sign-in to the admin"));
+ok("code email has no links", !/href=/i.test((await mail()).find((e) => e.subject === "Your admin sign-in code")?.html ?? "href="));
 ok(
   "session cookie is HttpOnly, Secure, SameSite=Strict",
   /HttpOnly/i.test(login.setCookie) &&

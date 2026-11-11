@@ -1,7 +1,15 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../env";
-import { adminConfigured, adminEmails, finishLogin, logout, requireAdmin, startLogin } from "../lib/auth";
+import {
+  adminConfigured,
+  adminEmails,
+  finishLogin,
+  logout,
+  requireAdmin,
+  sendSignInAlert,
+  startLogin,
+} from "../lib/auth";
 import { freeSlots, HOME_CARDS, homeCards, unitsFor, type ServiceRow } from "../lib/data";
 import { sendCancelEmail, sendMovedEmails, sendRefundEmails } from "../lib/email";
 import { fail, readJson, readText } from "../lib/http";
@@ -30,6 +38,22 @@ function first<T>(r: D1Result<unknown> | undefined) {
 const actor = (c: { get: (k: "adminEmail") => string }) => c.get("adminEmail");
 const email = z.string().trim().min(3).max(254).pipe(z.email());
 
+// ---- Admin works only on the main address ----
+// The admin API answers only on SITE_URL's host (and on 127.0.0.1 for local work).
+// On www, workers.dev or any other host it behaves as if it doesn't exist, so a
+// copy of the site on another address can't be used to sign in or to reach admin data.
+adminRoutes.use("*", async (c, next) => {
+  const host = new URL(c.req.url).hostname;
+  let main = "";
+  try {
+    main = new URL(c.env.SITE_URL ?? "").hostname;
+  } catch {}
+  if (host !== main && host !== "127.0.0.1" && host !== "localhost")
+    return c.json({ error: "Not found" }, 404);
+  c.header("Cache-Control", "no-store");
+  await next();
+});
+
 // ---- Sign-in by emailed code (open) ----
 
 adminRoutes.get("/status", (c) => c.json({ configured: adminConfigured(c) }));
@@ -49,6 +73,8 @@ adminRoutes.post("/login/verify", async (c) => {
   if (!body.success) fail(400, "Enter the 6-digit code from the email");
   const who = await finishLogin(c, body.data.email, body.data.code);
   await audit(c.env, who, "signed_in");
+  // Tell the admin every time someone signs in, so a stolen code is noticed at once.
+  c.executionCtx.waitUntil(sendSignInAlert(c, who));
   return c.json({ ok: true });
 });
 

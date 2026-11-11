@@ -16,6 +16,9 @@ import { AdminOverview } from "./overview";
 import { AdminPlans } from "./plans";
 import { Notice, SignOutContext } from "./shared";
 
+/** The only address where the admin works (the Worker refuses the admin API anywhere else). */
+const ADMIN_HOST = "guidancebysatakshi.com";
+
 const tabs = [
   { id: "overview", label: "Overview", icon: Gauge },
   { id: "bookings", label: "Bookings", icon: CalendarDays },
@@ -160,6 +163,12 @@ export function AdminApp() {
 
   // Is sign-in set up, and is there a valid session already?
   useEffect(() => {
+    // The admin works only on the main address. Any other copy (www, workers.dev) is sent there.
+    const host = window.location.hostname;
+    if (host !== ADMIN_HOST && host !== "127.0.0.1" && host !== "localhost") {
+      window.location.replace(`https://${ADMIN_HOST}/admin`);
+      return;
+    }
     void api<{ configured: boolean }>("/api/admin/status")
       .then((status) => (status.ok && !status.data.configured ? null : api("/api/admin/me")))
       .then((me) => setAuth(me === null ? "off" : me.ok ? "in" : "out"));
