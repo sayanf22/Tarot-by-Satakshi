@@ -55,6 +55,8 @@ export function StepTime({
   const failed = Boolean(current && "error" in current);
   const loading = Boolean(date) && !current;
 
+  const timesRef = useRef<HTMLFieldSetElement>(null);
+
   // Keep the latest choice and handler without restarting the loading effects.
   const latest = useRef({ time, onTimeGone });
   useEffect(() => {
@@ -120,7 +122,19 @@ export function StepTime({
             <DayPicker
               mode="single"
               selected={date}
-              onSelect={onDate}
+              onSelect={(next) => {
+                onDate(next);
+                // On phones the times sit under the calendar: bring them into view.
+                if (next && !window.matchMedia("(min-width: 1280px)").matches)
+                  requestAnimationFrame(() =>
+                    timesRef.current?.scrollIntoView({
+                      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                        ? "auto"
+                        : "smooth",
+                      block: "start",
+                    }),
+                  );
+              }}
               weekStartsOn={1}
               startMonth={first}
               endMonth={last}
@@ -147,7 +161,7 @@ export function StepTime({
           </ul>
         </div>
 
-        <fieldset aria-describedby="slots-note">
+        <fieldset ref={timesRef} aria-describedby="slots-note" className="scroll-mt-24">
           <legend className="font-display text-2xl text-ink">
             {date ? `Times on ${format(date, "EEE, d MMM")}` : "Choose a time"}
           </legend>
