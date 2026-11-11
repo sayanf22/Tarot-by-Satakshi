@@ -55,6 +55,18 @@ export async function serviceBySlug(db: D1Database, slug: string) {
     .first<ServiceRow>();
 }
 
+/**
+ * Contact page mode. Off (the default): the form only writes a WhatsApp message, nothing is
+ * stored on the site. On: messages are saved to Admin → Messages and emailed to Satakshi.
+ * Switched in Admin → Account → Settings.
+ */
+export async function contactInbox(db: D1Database) {
+  const row = await db
+    .prepare("SELECT value FROM settings WHERE key = 'contact_inbox'")
+    .first<{ value: string }>();
+  return row?.value === "1";
+}
+
 /** How many plans the home page deck shows (the Services page always lists all of them). */
 export const HOME_CARDS = { min: 3, max: 12, fallback: 6 } as const;
 

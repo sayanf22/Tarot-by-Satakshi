@@ -77,8 +77,6 @@ export default function ContactPage() {
         <div className="relative overflow-hidden rounded-[32px] bg-white shadow-soft ring-1 ring-line">
           <Mandala className="pointer-events-none absolute -top-24 -right-24 size-72 text-gold-500/20" />
           <div className="relative px-6 py-8 sm:px-10 sm:py-10">
-            <h2 className="text-3xl">Send a message</h2>
-            <p className="mt-2 mb-8 text-ink-muted">{site.firstName} will reply by email or phone.</p>
             <ContactForm />
           </div>
         </div>

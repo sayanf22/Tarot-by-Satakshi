@@ -9,6 +9,8 @@ export const site = {
     display: "+91 88821 39419",
     href: "tel:+918882139419",
   },
+  /** The Contact form opens a chat with this number (digits only, with country code). Same as the phone. */
+  whatsapp: "918882139419",
   email: "tarotwithsatakshi@gmail.com",
   hours: {
     days: "Monday to Saturday",

@@ -26,7 +26,7 @@ type Overview = {
 
 type Tab = "overview" | "bookings" | "plans" | "hours" | "messages" | "images";
 
-export function AdminOverview({ onOpen }: { onOpen: (tab: Tab) => void }) {
+export function AdminOverview({ onOpen, inbox }: { onOpen: (tab: Tab) => void; inbox: boolean }) {
   const adminApi = useAdminApi();
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +43,10 @@ export function AdminOverview({ onOpen }: { onOpen: (tab: Tab) => void }) {
     { label: "Sessions today", value: String(data.today), tab: "bookings" as const },
     { label: "Upcoming sessions", value: String(data.upcoming), tab: "bookings" as const },
     { label: "Earned this month", value: rupees(data.revenueMonthPaise), tab: "bookings" as const },
-    { label: "New messages", value: String(data.newMessages), tab: "messages" as const },
+    // The Messages tab exists only while the website inbox is on.
+    inbox
+      ? { label: "New messages", value: String(data.newMessages), tab: "messages" as const }
+      : { label: "Live plans", value: String(data.plans), tab: "plans" as const },
   ];
 
   return (

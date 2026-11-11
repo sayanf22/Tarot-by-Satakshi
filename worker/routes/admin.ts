@@ -13,7 +13,7 @@ import {
   sendSignInAlert,
   startLogin,
 } from "../lib/auth";
-import { freeSlots, HOME_CARDS, homeCards, unitsFor, type ServiceRow } from "../lib/data";
+import { contactInbox, freeSlots, HOME_CARDS, homeCards, unitsFor, type ServiceRow } from "../lib/data";
 import { sendAdminChangeEmails, sendCancelEmail, sendMovedEmails, sendRefundEmails } from "../lib/email";
 import { fail, readJson, readText } from "../lib/http";
 import { audit } from "../lib/logs";
@@ -480,6 +480,21 @@ adminRoutes.get("/services", async (c) => {
     publish: await publishState(c.env),
     payments: Boolean(c.env.RAZORPAY_KEY_ID && c.env.RAZORPAY_KEY_SECRET && c.env.RAZORPAY_WEBHOOK_SECRET),
   });
+});
+
+/** Contact page mode: WhatsApp only (default) or the website inbox. */
+adminRoutes.get("/contact-mode", async (c) => c.json({ inbox: await contactInbox(c.env.DB) }));
+
+adminRoutes.put("/contact-mode", async (c) => {
+  const body = z.object({ inbox: z.boolean() }).safeParse(await readJson(c));
+  if (!body.success) fail(400, "Invalid request");
+  await c.env.DB.prepare(
+    "INSERT INTO settings (key, value) VALUES ('contact_inbox', ?1) ON CONFLICT (key) DO UPDATE SET value = ?1",
+  )
+    .bind(body.data.inbox ? "1" : "0")
+    .run();
+  await audit(c.env, actor(c), "settings.contact_inbox", "", body.data.inbox ? "on" : "off");
+  return c.json({ inbox: body.data.inbox });
 });
 
 /** How many plans the home page deck shows. The Services page always lists every plan. */

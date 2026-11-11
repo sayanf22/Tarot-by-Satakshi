@@ -10,6 +10,7 @@ import {
   homeCards,
   bookable,
   bookingSettings,
+  contactInbox,
   daySlots,
   freeSlots,
   publicService,
@@ -34,7 +35,9 @@ import { verifyTurnstile } from "../lib/turnstile";
 export const publicRoutes = new Hono<AppContext>();
 
 /** What the booking page needs to know before it starts. */
-publicRoutes.get("/config", (c) => c.json({ payments: paymentsConfigured(c.env) }));
+publicRoutes.get("/config", async (c) =>
+  c.json({ payments: paymentsConfigured(c.env), contactInbox: await contactInbox(c.env.DB) }),
+);
 
 publicRoutes.get("/services", async (c) => {
   await rateLimit(c, "RL_READ", "services");
@@ -74,6 +77,8 @@ publicRoutes.get("/days", async (c) => {
 publicRoutes.post("/contact", async (c) => {
   requireSameOrigin(c);
   await rateLimit(c, "RL_FORM", "contact");
+  // With the inbox off, the Contact page sends people to WhatsApp and nothing is stored here.
+  if (!(await contactInbox(c.env.DB))) fail(403, "Website messages are off. Please message on WhatsApp.");
   const body = (await readJson(c)) as Record<string, unknown>;
   await verifyTurnstile(c, body?.turnstileToken, "contact");
   const parsed = contactSchema.safeParse(body);

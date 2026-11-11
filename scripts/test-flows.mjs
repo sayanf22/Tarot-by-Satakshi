@@ -4,6 +4,7 @@
 // Run: node scripts/test-mocks.mjs (in one terminal), npm run build, wrangler dev, then
 //      npm run test:flows
 import { createHmac } from "node:crypto";
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const B = "http://127.0.0.1:8787";
@@ -67,11 +68,38 @@ ok(
   JSON.stringify(health.data),
 );
 const { data: list } = await api("/api/services");
-const plan = list.services?.find((s) => s.bookable);
+// An astrology plan, so the birth-detail checks below have something to check.
+const plan =
+  list.services?.find((s) => s.bookable && s.category === "astrology") ??
+  list.services?.find((s) => s.bookable);
 ok("a bookable plan exists locally", Boolean(plan), plan?.slug ?? "add one in the local admin");
 if (!plan) process.exit(1);
 
 // ---- Contact form ----
+// Off by default: the Contact page only opens WhatsApp and the site stores nothing.
+function setInbox(on) {
+  execSync(
+    `npx wrangler d1 execute tarot-by-satakshi-db --local --command "INSERT INTO settings (key, value) VALUES ('contact_inbox', '${on ? 1 : 0}') ON CONFLICT (key) DO UPDATE SET value = '${on ? 1 : 0}'"`,
+    { stdio: "ignore", env: { ...process.env, CI: "1", WRANGLER_SEND_METRICS: "false" } },
+  );
+}
+setInbox(false);
+{
+  const cfg = await api("/api/config");
+  ok(
+    "website inbox is off by default (WhatsApp mode)",
+    cfg.data.contactInbox === false,
+    JSON.stringify(cfg.data),
+  );
+  const refused = await api("/api/contact", {
+    method: "POST",
+    ip: "10.0.0.9",
+    json: { name: "Off Test", email: CLIENT, phone: "", message: "This should not be stored." },
+  });
+  ok("with the inbox off, the site refuses to store messages", refused.status === 403, refused.data?.error);
+}
+setInbox(true);
+ok("inbox can be switched on", (await api("/api/config")).data.contactInbox === true);
 const contact = await api("/api/contact", {
   method: "POST",
   ip: "10.0.0.1",
@@ -379,6 +407,27 @@ const login = await api("/api/admin/login/verify", {
 });
 const cookie = login.setCookie?.split(";")[0];
 ok("right code signs in", login.status === 200 && cookie?.startsWith("__Host-tbs_admin="));
+{
+  const off = await api("/api/admin/contact-mode", {
+    method: "PUT",
+    cookie,
+    ip: "10.0.3.2",
+    json: { inbox: false },
+  });
+  const cfg = await api("/api/config");
+  ok(
+    "admin can turn the website inbox off in Settings",
+    off.status === 200 && cfg.data.contactInbox === false,
+  );
+  const bad = await api("/api/admin/contact-mode", {
+    method: "PUT",
+    cookie,
+    ip: "10.0.3.2",
+    json: { inbox: "yes" },
+  });
+  ok("inbox setting only takes true or false", bad.status === 400);
+  await api("/api/admin/contact-mode", { method: "PUT", cookie, ip: "10.0.3.2", json: { inbox: true } });
+}
 await wait(800);
 ok(
   "sign-in alert emailed to the admin",

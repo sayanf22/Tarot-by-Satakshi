@@ -4,6 +4,7 @@ import { Mail, ShieldCheck, UserMinus, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
+import { cn } from "@/lib/cn";
 import { useCooldown } from "@/lib/use-cooldown";
 import { Badge, Notice, PageTitle, Panel, useAdminApi, when } from "./shared";
 
@@ -142,7 +143,83 @@ function Admins() {
   );
 }
 
-export function AdminAccount({ onSignOutAll }: { onSignOutAll: () => void }) {
+/** Site settings. The website inbox is off unless an admin turns it on here. */
+function Settings({ onInboxChange }: { onInboxChange: (on: boolean) => void }) {
+  const adminApi = useAdminApi();
+  const [inbox, setInbox] = useState<boolean | null>(null);
+  const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void adminApi<{ inbox: boolean }>("/contact-mode").then((r) => r.ok && setInbox(r.data.inbox));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function toggle() {
+    if (inbox === null || busy) return;
+    const next = !inbox;
+    setBusy(true);
+    setMsg(null);
+    const r = await adminApi<{ inbox: boolean }>("/contact-mode", { method: "PUT", json: { inbox: next } });
+    setBusy(false);
+    if (!r.ok) return setMsg({ tone: "error", text: r.error });
+    setInbox(r.data.inbox);
+    onInboxChange(r.data.inbox);
+    setMsg({
+      tone: "ok",
+      text: r.data.inbox
+        ? "Website inbox is on. Contact form messages now arrive in the Messages tab and by email."
+        : "Website inbox is off. The Contact form now opens WhatsApp, and nothing is stored here.",
+    });
+  }
+
+  return (
+    <Panel title="Settings">
+      <div className="flex items-start justify-between gap-4 rounded-2xl bg-ivory p-4">
+        <div>
+          <p className="font-semibold text-ink">Website inbox for the Contact form</p>
+          <p className="mt-0.5 text-sm text-ink-muted">
+            {inbox
+              ? "On: messages are saved in the Messages tab and emailed to Satakshi."
+              : "Off: visitors write a message and it opens in WhatsApp. Nothing is stored on the site and the Messages tab is hidden."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={inbox === true}
+          aria-label="Website inbox for the Contact form"
+          disabled={inbox === null || busy}
+          onClick={() => void toggle()}
+          className={cn(
+            "relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-700 disabled:opacity-60",
+            inbox ? "bg-gold-700" : "bg-[#d8d2c6]",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute top-1 left-1 size-5 rounded-full bg-white shadow transition-transform",
+              inbox && "translate-x-5",
+            )}
+          />
+        </button>
+      </div>
+      {msg ? (
+        <div className="mt-4">
+          <Notice tone={msg.tone}>{msg.text}</Notice>
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
+export function AdminAccount({
+  onSignOutAll,
+  onInboxChange,
+}: {
+  onSignOutAll: () => void;
+  onInboxChange: (on: boolean) => void;
+}) {
   const adminApi = useAdminApi();
   const [acc, setAcc] = useState<Account | null>(null);
 
@@ -184,6 +261,8 @@ export function AdminAccount({ onSignOutAll }: { onSignOutAll: () => void }) {
           because whoever can read that inbox can sign in here.
         </p>
       </Panel>
+
+      <Settings onInboxChange={onInboxChange} />
 
       <Admins />
 

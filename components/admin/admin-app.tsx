@@ -226,6 +226,16 @@ export function AdminApp() {
     setAuth("out");
   }
 
+  // Messages tab shows only while the website inbox is on (Account → Settings).
+  const [inbox, setInbox] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (auth !== "in") return;
+    void api<{ inbox: boolean }>("/api/admin/contact-mode").then((r) => r.ok && setInbox(r.data.inbox));
+  }, [auth]);
+  const shownTabs = tabs.filter((t) => t.id !== "messages" || inbox === true);
+  // Turning the inbox off while on Messages goes back to Account.
+  if (tab === "messages" && inbox === false && auth === "in") setTab("account");
+
   if (auth === "checking") return <p className="py-24 text-center text-ink-muted">Loading…</p>;
   if (auth === "off")
     return (
@@ -259,7 +269,7 @@ export function AdminApp() {
           aria-label="Admin sections"
           className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 pb-3 sm:px-6"
         >
-          {tabs.map(({ id, label, icon: Icon }) => (
+          {shownTabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -285,7 +295,7 @@ export function AdminApp() {
             <Wordmark className="items-start" />
             <p className="mt-2 text-xs font-bold tracking-[0.2em] text-gold-800 uppercase">Admin</p>
             <nav aria-label="Admin sections" className="mt-6 flex flex-col gap-1">
-              {tabs.map(({ id, label, icon: Icon }) => (
+              {shownTabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
                   type="button"
@@ -312,13 +322,15 @@ export function AdminApp() {
         </aside>
 
         <main id="main" className="min-w-0 flex-1 animate-rise space-y-6" key={tab}>
-          {tab === "overview" ? <AdminOverview onOpen={go} /> : null}
+          {tab === "overview" ? <AdminOverview onOpen={go} inbox={inbox === true} /> : null}
           {tab === "bookings" ? <AdminBookings /> : null}
           {tab === "plans" ? <AdminPlans /> : null}
           {tab === "hours" ? <AdminHours /> : null}
-          {tab === "messages" ? <AdminMessages /> : null}
+          {tab === "messages" && inbox === true ? <AdminMessages /> : null}
           {tab === "images" ? <AdminImages /> : null}
-          {tab === "account" ? <AdminAccount onSignOutAll={() => void signOut(true)} /> : null}
+          {tab === "account" ? (
+            <AdminAccount onSignOutAll={() => void signOut(true)} onInboxChange={setInbox} />
+          ) : null}
         </main>
       </div>
     </SignOutContext.Provider>

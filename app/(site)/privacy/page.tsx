@@ -31,7 +31,11 @@ const sections: LegalSection[] = [
           Astrology bookings: your date of birth, your time of birth (or that you do not know it), and your
           place of birth.
         </li>
-        <li>Contact messages: your name, email address, phone number if you add one, and your message.</li>
+        <li>
+          Contact messages: the Contact page form opens WhatsApp with your name and message, and nothing is
+          stored on this website; WhatsApp&apos;s own privacy policy covers that chat. If website messages are
+          switched on, we keep your name, email address, phone number if you add one, and your message.
+        </li>
         <li>
           Payment records: the Razorpay order and payment IDs, the amount, the payment status and any refund
           ID. We never receive or store your card or bank details.
