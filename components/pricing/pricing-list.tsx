@@ -17,7 +17,7 @@ function withPrice(list: readonly Service[]) {
 /** The whole photo, never cropped: it sits inside the frame, over a blurred copy of itself. */
 function PlanPhoto({ src, alt }: { src: string; alt: string }) {
   return (
-    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[22px] bg-ivory ring-1 ring-line sm:w-56">
+    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[22px] bg-ivory ring-1 ring-line @xl:w-56">
       {/* oxlint-disable-next-line nextjs/no-img-element -- static export: photos are compressed on upload */}
       <img
         src={src}
@@ -34,6 +34,40 @@ function PlanPhoto({ src, alt }: { src: string; alt: string }) {
         className="relative size-full object-contain"
       />
     </div>
+  );
+}
+
+/**
+ * One plan on the Pricing page. It lays itself out by its own width (container queries), so the
+ * admin preview shows exactly this row at phone width and the page shows it wider.
+ */
+export function PricingRow({ s }: { s: Service & { pricePaise: number } }) {
+  return (
+    <li className="@container border-b border-line last:border-b-0">
+      <div className="flex flex-col gap-6 p-6 @xl:flex-row @xl:items-center @xl:p-8">
+        {s.image ? <PlanPhoto src={s.image} alt={s.name} /> : null}
+        <div className="flex min-w-0 flex-1 flex-col gap-6 @4xl:flex-row @4xl:items-center @4xl:justify-between">
+          <div className="min-w-0">
+            <p className="eyebrow">{categoryLabels[s.category]}</p>
+            <h2 className="mt-2 text-2xl">{s.name}</h2>
+            {s.summary ? <p className="mt-2 text-ink">{s.summary}</p> : null}
+            <p className="mt-3 text-sm font-semibold text-ink">
+              {sessionLabel(s.formats)}
+              {s.durationMin ? ` · ${formatDuration(s.durationMin)}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 @4xl:shrink-0 @4xl:flex-col @4xl:items-end">
+            <p className="font-display text-3xl text-ink tabular">
+              {s.pricePaise > 0 ? formatPrice(s.pricePaise) : "₹ —"}
+            </p>
+            <ButtonLink href={`/book?service=${s.slug}`} variant="outline">
+              Book this reading
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </ButtonLink>
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -77,30 +111,7 @@ export function PricingList({ built }: { built: readonly Service[] }) {
   return (
     <ul className="overflow-hidden rounded-[32px] bg-white ring-1 ring-line">
       {plans.map((s) => (
-        <li
-          key={s.slug}
-          className="flex flex-col gap-6 border-b border-line p-6 last:border-b-0 sm:flex-row sm:items-center sm:p-8"
-        >
-          {s.image ? <PlanPhoto src={s.image} alt={s.name} /> : null}
-          <div className="flex min-w-0 flex-1 flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <p className="eyebrow">{categoryLabels[s.category]}</p>
-              <h2 className="mt-2 text-2xl">{s.name}</h2>
-              {s.summary ? <p className="mt-2 text-ink">{s.summary}</p> : null}
-              <p className="mt-3 text-sm font-semibold text-ink">
-                {sessionLabel(s.formats)}
-                {s.durationMin ? ` · ${formatDuration(s.durationMin)}` : ""}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 lg:shrink-0 lg:flex-col lg:items-end">
-              <p className="font-display text-3xl text-ink tabular">{formatPrice(s.pricePaise)}</p>
-              <ButtonLink href={`/book?service=${s.slug}`} variant="outline">
-                Book this reading
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </ButtonLink>
-            </div>
-          </div>
-        </li>
+        <PricingRow key={s.slug} s={s} />
       ))}
     </ul>
   );

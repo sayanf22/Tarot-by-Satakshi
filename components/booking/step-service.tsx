@@ -19,6 +19,50 @@ export function optionState(selected: boolean) {
   return selected ? "border-gold-600 bg-ivory ring-1 ring-gold-600" : "border-line hover:border-gold-500";
 }
 
+/** One reading in the "Choose a reading" list (also shown in the admin preview). */
+export function ServiceChoice({
+  s,
+  selected,
+  onSelect,
+}: {
+  s: Service;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <label className={cn(optionClasses, optionState(selected), "items-start gap-4 p-4")}>
+      <input
+        type="radio"
+        name="service"
+        value={s.slug}
+        checked={selected}
+        onChange={onSelect}
+        className="sr-only"
+      />
+      <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-ivory ring-1 ring-gold-500/25">
+        <TarotArt icon={s.icon} className="size-10 text-gold-700" />
+      </span>
+      <span className="min-w-0">
+        <span className="block font-display text-lg leading-snug text-ink">{s.name}</span>
+        <span className="mt-0.5 block text-sm text-ink-muted">
+          {categoryLabels[s.category]} · {s.summary}
+        </span>
+        <span className="mt-2 block text-sm">
+          {s.durationMin || s.pricePaise ? (
+            <span className="font-semibold text-ink tabular">
+              {[s.durationMin && formatDuration(s.durationMin), s.pricePaise && formatPrice(s.pricePaise)]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          ) : s.sample ? (
+            <SampleTag />
+          ) : null}
+        </span>
+      </span>
+    </label>
+  );
+}
+
 type Props = {
   services: readonly Service[];
   serviceSlug?: string;
@@ -39,47 +83,14 @@ export function StepService({ services, serviceSlug, sessionFormat, onService, o
       <fieldset>
         <legend className="font-display text-2xl text-ink">Choose a reading</legend>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {services.map((s) => {
-            const selected = s.slug === serviceSlug;
-            return (
-              <label
-                key={s.slug}
-                className={cn(optionClasses, optionState(selected), "items-start gap-4 p-4")}
-              >
-                <input
-                  type="radio"
-                  name="service"
-                  value={s.slug}
-                  checked={selected}
-                  onChange={() => onService(s.slug)}
-                  className="sr-only"
-                />
-                <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-ivory ring-1 ring-gold-500/25">
-                  <TarotArt icon={s.icon} className="size-10 text-gold-700" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-display text-lg leading-snug text-ink">{s.name}</span>
-                  <span className="mt-0.5 block text-sm text-ink-muted">
-                    {categoryLabels[s.category]} · {s.summary}
-                  </span>
-                  <span className="mt-2 block text-sm">
-                    {s.durationMin || s.pricePaise ? (
-                      <span className="font-semibold text-ink tabular">
-                        {[
-                          s.durationMin && formatDuration(s.durationMin),
-                          s.pricePaise && formatPrice(s.pricePaise),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    ) : s.sample ? (
-                      <SampleTag />
-                    ) : null}
-                  </span>
-                </span>
-              </label>
-            );
-          })}
+          {services.map((s) => (
+            <ServiceChoice
+              key={s.slug}
+              s={s}
+              selected={s.slug === serviceSlug}
+              onSelect={() => onService(s.slug)}
+            />
+          ))}
         </div>
       </fieldset>
 
