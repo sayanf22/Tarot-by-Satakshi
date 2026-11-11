@@ -497,6 +497,46 @@ adminRoutes.put("/contact-mode", async (c) => {
   return c.json({ inbox: body.data.inbox });
 });
 
+/**
+ * Notification counts for the admin bell and tab badges. New messages are the ones not yet
+ * marked read (only while the website inbox is on). New bookings are those confirmed since the
+ * admin last opened the Bookings tab. On the very first check nothing counts, so old bookings
+ * don't alarm anyone.
+ */
+adminRoutes.get("/alerts", async (c) => {
+  const db = c.env.DB;
+  let seen = await db
+    .prepare("SELECT value FROM settings WHERE key = 'seen_bookings_at'")
+    .first<{ value: string }>();
+  if (!seen) {
+    await db
+      .prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('seen_bookings_at', ?1)")
+      .bind(String(Date.now()))
+      .run();
+    seen = { value: String(Date.now()) };
+  }
+  const since = Number(seen.value) || 0;
+  const inbox = await contactInbox(db);
+  const messages = inbox
+    ? await db.prepare("SELECT count(*) AS n FROM enquiries WHERE status = 'new'").first<{ n: number }>()
+    : null;
+  const bookings = await db
+    .prepare("SELECT count(*) AS n FROM bookings WHERE status = 'confirmed' AND confirmed_at > ?1")
+    .bind(since)
+    .first<{ n: number }>();
+  return c.json({ inbox, messages: messages?.n ?? 0, bookings: bookings?.n ?? 0 });
+});
+
+/** The admin opened the Bookings tab: clear the new-booking count. */
+adminRoutes.post("/alerts/seen-bookings", async (c) => {
+  await c.env.DB.prepare(
+    "INSERT INTO settings (key, value) VALUES ('seen_bookings_at', ?1) ON CONFLICT (key) DO UPDATE SET value = ?1",
+  )
+    .bind(String(Date.now()))
+    .run();
+  return c.json({ ok: true });
+});
+
 /** How many plans the home page deck shows. The Services page always lists every plan. */
 adminRoutes.put("/home-cards", async (c) => {
   const body = z

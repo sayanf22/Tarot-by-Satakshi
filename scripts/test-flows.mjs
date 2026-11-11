@@ -427,6 +427,23 @@ ok("right code signs in", login.status === 200 && cookie?.startsWith("__Host-tbs
   });
   ok("inbox setting only takes true or false", bad.status === 400);
   await api("/api/admin/contact-mode", { method: "PUT", cookie, ip: "10.0.3.2", json: { inbox: true } });
+  const alerts = await api("/api/admin/alerts", { cookie, ip: "10.0.3.2" });
+  ok(
+    "admin sees new-message and new-booking counts",
+    alerts.status === 200 &&
+      typeof alerts.data.messages === "number" &&
+      typeof alerts.data.bookings === "number",
+    JSON.stringify(alerts.data),
+  );
+  ok("alerts need a session", (await api("/api/admin/alerts", { ip: "10.0.3.6" })).status === 401);
+  const seen = await api("/api/admin/alerts/seen-bookings", {
+    method: "POST",
+    cookie,
+    ip: "10.0.3.2",
+    json: {},
+  });
+  const after = await api("/api/admin/alerts", { cookie, ip: "10.0.3.2" });
+  ok("opening Bookings clears the booking count", seen.status === 200 && after.data.bookings === 0);
 }
 await wait(800);
 ok(

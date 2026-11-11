@@ -14,9 +14,8 @@ const sections: LegalSection[] = [
     heading: "Who we are",
     body: (
       <p>
-        This website is run by {site.owner}, an individual, under the name {site.name}, from {site.address}.
-        In these terms, “we”, “us” and “our” mean {site.name}. “You” means anyone who uses this website or
-        books a reading.
+        This website is run by {site.owner} under the name {site.name}, from {site.address}. In these terms,
+        “we”, “us” and “our” mean {site.name}. “You” means anyone who uses this website or books a reading.
       </p>
     ),
   },
@@ -63,10 +62,7 @@ const sections: LegalSection[] = [
         <li>
           Prices are shown in Indian rupees (INR) on the Pricing page and on the booking page, before you pay.
         </li>
-        <li>
-          The price shown is the full amount you pay. No other charges are added at checkout. We are not
-          registered for GST, so no GST is charged.
-        </li>
+        <li>The price shown is the full amount you pay. No other charges are added at checkout.</li>
         <li>Payment is taken in full when you book.</li>
         <li>
           Payments are handled by Razorpay, a payment service provider. You enter your card, UPI or bank

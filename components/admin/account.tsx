@@ -4,6 +4,7 @@ import { Mail, ShieldCheck, UserMinus, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/cn";
 import { useCooldown } from "@/lib/use-cooldown";
 import { Badge, Notice, PageTitle, Panel, useAdminApi, when } from "./shared";
@@ -149,6 +150,7 @@ function Settings({ onInboxChange }: { onInboxChange: (on: boolean) => void }) {
   const [inbox, setInbox] = useState<boolean | null>(null);
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     void adminApi<{ inbox: boolean }>("/contact-mode").then((r) => r.ok && setInbox(r.data.inbox));
@@ -162,6 +164,7 @@ function Settings({ onInboxChange }: { onInboxChange: (on: boolean) => void }) {
     setMsg(null);
     const r = await adminApi<{ inbox: boolean }>("/contact-mode", { method: "PUT", json: { inbox: next } });
     setBusy(false);
+    setAsking(false);
     if (!r.ok) return setMsg({ tone: "error", text: r.error });
     setInbox(r.data.inbox);
     onInboxChange(r.data.inbox);
@@ -190,7 +193,7 @@ function Settings({ onInboxChange }: { onInboxChange: (on: boolean) => void }) {
           aria-checked={inbox === true}
           aria-label="Website inbox for the Contact form"
           disabled={inbox === null || busy}
-          onClick={() => void toggle()}
+          onClick={() => setAsking(true)}
           className={cn(
             "relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-700 disabled:opacity-60",
             inbox ? "bg-gold-700" : "bg-[#d8d2c6]",
@@ -209,6 +212,27 @@ function Settings({ onInboxChange }: { onInboxChange: (on: boolean) => void }) {
           <Notice tone={msg.tone}>{msg.text}</Notice>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={asking}
+        title={inbox ? "Turn the website inbox off?" : "Turn the website inbox on?"}
+        confirmLabel={inbox ? "Turn off" : "Turn on"}
+        busy={busy}
+        onConfirm={() => void toggle()}
+        onCancel={() => setAsking(false)}
+      >
+        {inbox ? (
+          <p>
+            The Contact form will go back to opening WhatsApp. Messages already in the Messages tab are kept,
+            but new ones won&apos;t be saved on the site, and the Messages tab will be hidden.
+          </p>
+        ) : (
+          <p>
+            The Contact form will save each message in the Messages tab and email it to Satakshi. Messages are
+            stored on this website from then on.
+          </p>
+        )}
+      </ConfirmDialog>
     </Panel>
   );
 }

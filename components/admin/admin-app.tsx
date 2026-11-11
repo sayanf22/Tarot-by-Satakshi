@@ -1,7 +1,18 @@
 "use client";
 
-import { CalendarDays, Clock, Gauge, Images, Inbox, Layers, LogOut, Mail, UserRound } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  Bell,
+  CalendarDays,
+  Clock,
+  Gauge,
+  Images,
+  Inbox,
+  Layers,
+  LogOut,
+  Mail,
+  UserRound,
+} from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Wordmark } from "@/components/brand/wordmark";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
@@ -233,6 +244,64 @@ export function AdminApp() {
     void api<{ inbox: boolean }>("/api/admin/contact-mode").then((r) => r.ok && setInbox(r.data.inbox));
   }, [auth]);
   const shownTabs = tabs.filter((t) => t.id !== "messages" || inbox === true);
+
+  // New messages (not yet read) and new bookings (confirmed since the Bookings tab was last open).
+  const [alerts, setAlerts] = useState({ messages: 0, bookings: 0 });
+  const loadAlerts = useCallback(async () => {
+    const r = await api<{ messages: number; bookings: number }>("/api/admin/alerts");
+    if (r.ok) setAlerts({ messages: r.data.messages, bookings: r.data.bookings });
+  }, []);
+  useEffect(() => {
+    if (auth !== "in") return;
+    // Async wrapper: the count is written after the network reply, not during the effect.
+    const check = async () => {
+      await loadAlerts();
+    };
+    void check();
+    const timer = setInterval(() => void check(), 60_000);
+    const again = () => document.visibilityState === "visible" && void check();
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", again);
+    };
+  }, [auth, loadAlerts]);
+  // Opening Bookings (or getting a new booking while it is open) clears the booking count.
+  useEffect(() => {
+    if (auth !== "in" || tab !== "bookings" || alerts.bookings === 0) return;
+    void api("/api/admin/alerts/seen-bookings", { method: "POST", json: {} }).then(() =>
+      setAlerts((a) => ({ ...a, bookings: 0 })),
+    );
+  }, [auth, tab, alerts.bookings]);
+  const messagesCount = inbox === true ? alerts.messages : 0;
+  const totalNew = messagesCount + alerts.bookings;
+  const bellTarget: Tab = messagesCount > 0 ? "messages" : "bookings";
+  const badge = (id: Tab) => {
+    const n = id === "messages" ? messagesCount : id === "bookings" ? alerts.bookings : 0;
+    return n > 0 ? (
+      <span
+        className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-gold-700 px-1.5 text-[0.7rem] leading-5 font-bold text-white tabular"
+        aria-label={`${n} new`}
+      >
+        {n > 99 ? "99+" : n}
+      </span>
+    ) : null;
+  };
+  const bell = (
+    <button
+      type="button"
+      onClick={() => go(totalNew > 0 ? bellTarget : "overview")}
+      aria-label={totalNew > 0 ? `Notifications: ${totalNew} new` : "Notifications: nothing new"}
+      className="relative flex size-10 shrink-0 items-center justify-center rounded-full text-ink ring-1 ring-line hover:bg-champagne"
+    >
+      <Bell className="size-4" aria-hidden="true" />
+      {totalNew > 0 ? (
+        <span className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[0.65rem] leading-5 font-bold text-white tabular">
+          {totalNew > 99 ? "99+" : totalNew}
+        </span>
+      ) : null}
+    </button>
+  );
   // Turning the inbox off while on Messages goes back to Account.
   if (tab === "messages" && inbox === false && auth === "in") setTab("account");
 
@@ -256,6 +325,7 @@ export function AdminApp() {
               Admin
             </span>
           </div>
+          <div className="flex items-center gap-2 lg:hidden">{bell}</div>
           <button
             type="button"
             onClick={() => void signOut()}
@@ -283,6 +353,7 @@ export function AdminApp() {
             >
               <Icon className="size-4" aria-hidden="true" />
               {label}
+              {badge(id)}
             </button>
           ))}
         </nav>
@@ -293,7 +364,10 @@ export function AdminApp() {
         <aside className="hidden w-56 shrink-0 lg:block">
           <div className="sticky top-10">
             <Wordmark className="items-start" />
-            <p className="mt-2 text-xs font-bold tracking-[0.2em] text-gold-800 uppercase">Admin</p>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <p className="text-xs font-bold tracking-[0.2em] text-gold-800 uppercase">Admin</p>
+              {bell}
+            </div>
             <nav aria-label="Admin sections" className="mt-6 flex flex-col gap-1">
               {shownTabs.map(({ id, label, icon: Icon }) => (
                 <button
@@ -308,6 +382,7 @@ export function AdminApp() {
                 >
                   <Icon className="size-4" aria-hidden="true" />
                   {label}
+                  {badge(id)}
                 </button>
               ))}
             </nav>
