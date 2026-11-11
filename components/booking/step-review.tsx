@@ -4,11 +4,12 @@ import { Lock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ServiceMeta } from "@/components/services/service-card";
+import { SessionLength } from "@/components/services/service-card";
 import { Button } from "@/components/ui/button";
 import { TurnstileField } from "@/components/ui/turnstile-field";
 import { api } from "@/lib/api";
 import { openCheckout, type Checkout } from "@/lib/booking/razorpay-checkout";
+import { formatPrice } from "@/lib/format";
 import { site } from "@/lib/site";
 import { useCooldown } from "@/lib/use-cooldown";
 import { formatLabels, type Service, type SessionFormat } from "@/lib/types";
@@ -24,6 +25,8 @@ type Props = {
   details: BookingDetails;
   paymentsOn: boolean;
   onEdit: (step: StepNumber) => void;
+  /** The time was taken by another client before this one could hold it. */
+  onTimeTaken: () => void;
 };
 
 type GroupProps = { title: string; step: StepNumber; onEdit: Props["onEdit"]; children: ReactNode };
@@ -67,6 +70,7 @@ export function StepReview({
   details,
   paymentsOn,
   onEdit,
+  onTimeTaken,
 }: Props) {
   const router = useRouter();
   const [agreed, setAgreed] = useState(false);
@@ -114,6 +118,8 @@ export function StepReview({
       setToken(null);
       if (!res.ok) {
         setPhase("idle");
+        // 409: another client holds or booked this time. Send them back to pick another.
+        if (res.status === 409 && /no longer free|just taken/i.test(res.error)) return onTimeTaken();
         setError(res.error);
         retryPause.start(res.status === 429 ? 30 : 4);
         return;
@@ -177,9 +183,18 @@ export function StepReview({
       </Group>
 
       <div className="rounded-3xl border border-gold-500/50 bg-ivory p-6 sm:p-7">
-        <div className="flex items-center justify-between gap-4">
-          <span className="font-semibold text-ink">Amount</span>
-          <ServiceMeta service={service} />
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+          <div>
+            <p className="font-semibold text-ink">Amount to pay</p>
+            {service.durationMin ? (
+              <p className="mt-1 text-sm text-ink-muted">
+                <SessionLength minutes={service.durationMin} /> with {site.firstName}, {timeLabel} IST
+              </p>
+            ) : null}
+          </div>
+          {service.pricePaise ? (
+            <p className="font-display text-3xl text-ink tabular">{formatPrice(service.pricePaise)}</p>
+          ) : null}
         </div>
 
         {canPay ? (
@@ -254,7 +269,10 @@ export function StepReview({
               Pay and confirm
             </Button>
             <p id="payment-note" className="mt-3 text-center text-sm text-ink-muted">
-              Online booking for this reading opens soon. To book now, call{" "}
+              {paymentsOn
+                ? "This reading can't be paid for online yet."
+                : "Online payment is being set up, so this can't be paid for here yet."}{" "}
+              To book now, call{" "}
               <a href={site.phone.href} className="font-semibold text-gold-800 underline">
                 {site.phone.display}
               </a>

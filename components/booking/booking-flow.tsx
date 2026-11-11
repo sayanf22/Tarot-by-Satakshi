@@ -3,7 +3,9 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { site } from "@/lib/site";
 import type { Service, SessionFormat } from "@/lib/types";
+import { useLiveServices } from "@/lib/use-live-services";
 import type { BookingDetails } from "@/lib/validation/booking";
 import { BookingSummary } from "./booking-summary";
 import { StepDetails } from "./step-details";
@@ -12,28 +14,51 @@ import { StepReview } from "./step-review";
 import { StepService } from "./step-service";
 import { StepTime } from "./step-time";
 
+/** Said once at the top, so nobody fills in the whole form before finding out they can't pay. */
+function PaymentsOffNote() {
+  return (
+    <output className="mt-6 block rounded-2xl border border-gold-500/50 bg-ivory px-5 py-4 text-sm text-ink">
+      <strong>Online payment is being set up.</strong> You can look at readings and free times here. To book
+      now, call{" "}
+      <a href={site.phone.href} className="font-semibold text-gold-800 underline underline-offset-2">
+        {site.phone.display}
+      </a>
+      .
+    </output>
+  );
+}
+
 export function BookingFlow({ services: built }: { services: readonly Service[] }) {
   const params = useSearchParams();
   // The plans from the build show at once; the live list from the admin replaces them.
-  const [services, setServices] = useState<readonly Service[]>(built);
-  const [paymentsOn, setPaymentsOn] = useState(false);
+  const { services } = useLiveServices(built);
+  // Unknown until the Worker answers; then true or false.
+  const [paymentsOn, setPaymentsOn] = useState<boolean | null>(null);
   useEffect(() => {
-    void api<{ services: Service[] }>("/api/services").then((r) => {
-      if (r.ok) setServices(r.data.services);
-    });
     void api<{ payments: boolean }>("/api/config").then((r) => setPaymentsOn(r.ok && r.data.payments));
   }, []);
-  const preselected = services.find((s) => s.slug === params.get("service"));
+  const wanted = params.get("service");
+  const preselected = services.find((s) => s.slug === wanted);
 
   const [step, setStep] = useState<StepNumber>(1);
   const [serviceSlug, setServiceSlug] = useState(preselected?.slug);
   const [sessionFormat, setSessionFormat] = useState<SessionFormat | undefined>(
     preselected?.formats.length === 1 ? preselected.formats[0] : undefined,
   );
+  // A link to a plan added after the last build: pick it once the live list arrives.
+  const [linkUsed, setLinkUsed] = useState(Boolean(preselected));
+  if (!linkUsed && preselected && !serviceSlug) {
+    setLinkUsed(true);
+    setServiceSlug(preselected.slug);
+    if (preselected.formats.length === 1) setSessionFormat(preselected.formats[0]);
+  }
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState<string>();
   const [timeLabel, setTimeLabel] = useState<string>();
   const [details, setDetails] = useState<BookingDetails>();
+  // Bumped to make the times list load again (after a time was taken by someone else).
+  const [slotsVersion, setSlotsVersion] = useState(0);
+  const [takenNotice, setTakenNotice] = useState<string | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -83,6 +108,7 @@ export function BookingFlow({ services: built }: { services: readonly Service[] 
   return (
     <div ref={topRef} className="scroll-mt-28">
       <StepIndicator current={step} onSelect={goTo} />
+      {paymentsOn === false ? <PaymentsOffNote /> : null}
       <h2 ref={headingRef} tabIndex={-1} className="sr-only">
         {stepTitles[step]}
       </h2>
@@ -105,13 +131,25 @@ export function BookingFlow({ services: built }: { services: readonly Service[] 
               serviceSlug={serviceSlug}
               date={date}
               time={time}
+              refreshKey={slotsVersion}
+              notice={takenNotice}
               onDate={chooseDate}
               onTime={(value, label) => {
                 setTime(value);
                 setTimeLabel(label);
+                setTakenNotice(null);
+              }}
+              onTimeGone={() => {
+                // The chosen time was booked by someone else while this page was open.
+                setTakenNotice(
+                  `${timeLabel ?? "The time you chose"} has just been booked by someone else. Please choose another time.`,
+                );
+                setTime(undefined);
+                setTimeLabel(undefined);
               }}
               onBack={() => goTo(1)}
               onNext={() => goTo(3)}
+              durationMin={service?.durationMin}
             />
           ) : null}
 
@@ -135,9 +173,19 @@ export function BookingFlow({ services: built }: { services: readonly Service[] 
               date={date}
               time={time}
               timeLabel={timeLabel}
-              paymentsOn={paymentsOn}
+              paymentsOn={paymentsOn === true}
               details={details}
               onEdit={goTo}
+              onTimeTaken={() => {
+                // Someone else took the time: back to the times, which now show it as booked.
+                setTakenNotice(
+                  `Sorry, ${timeLabel} was just booked by someone else. Please choose another time. Your details are kept.`,
+                );
+                setTime(undefined);
+                setTimeLabel(undefined);
+                setSlotsVersion((v) => v + 1);
+                goTo(2);
+              }}
             />
           ) : null}
         </div>

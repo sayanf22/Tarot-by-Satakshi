@@ -17,6 +17,7 @@ import { freeSlots, HOME_CARDS, homeCards, unitsFor, type ServiceRow } from "../
 import { sendAdminChangeEmails, sendCancelEmail, sendMovedEmails, sendRefundEmails } from "../lib/email";
 import { fail, readJson, readText } from "../lib/http";
 import { audit } from "../lib/logs";
+import { markSiteChanged, publishState, startBuild } from "../lib/publish";
 import {
   contentHash,
   deleteImage,
@@ -65,10 +66,9 @@ adminRoutes.get("/status", (c) => c.json({ configured: adminConfigured(c) }));
 adminRoutes.post("/login/start", async (c) => {
   await rateLimit(c, "RL_LOGIN", "login-start");
   const body = z.object({ email }).safeParse(await readJson(c, 1024));
-  if (!body.success) fail(400, "Enter a valid email address");
-  await startLogin(c, body.data.email);
-  // Same answer whether or not the email is an admin.
-  return c.json({ ok: true });
+  if (!body.success) fail(400, "That doesn't look like an email address. Please check it.");
+  // 403 for an email that isn't an admin; otherwise sent, or how long to wait for the next code.
+  return c.json({ ok: true, ...(await startLogin(c, body.data.email)) });
 });
 
 adminRoutes.post("/login/verify", async (c) => {
@@ -473,7 +473,13 @@ adminRoutes.get("/services", async (c) => {
     `SELECT s.*, (SELECT count(*) FROM bookings b WHERE b.service_id = s.id) AS booking_count
      FROM services s ORDER BY s.archived, s.sort_order, s.id`,
   ).all<ServiceRow & { booking_count: number }>();
-  return c.json({ services: results, homeCards: await homeCards(c.env.DB), homeCardsRange: HOME_CARDS });
+  return c.json({
+    services: results,
+    homeCards: await homeCards(c.env.DB),
+    homeCardsRange: HOME_CARDS,
+    publish: await publishState(c.env),
+    payments: Boolean(c.env.RAZORPAY_KEY_ID && c.env.RAZORPAY_KEY_SECRET && c.env.RAZORPAY_WEBHOOK_SECRET),
+  });
 });
 
 /** How many plans the home page deck shows. The Services page always lists every plan. */
@@ -488,6 +494,7 @@ adminRoutes.put("/home-cards", async (c) => {
     .bind(String(body.data.homeCards))
     .run();
   await audit(c.env, actor(c), "settings.home_cards", "", String(body.data.homeCards));
+  await markSiteChanged(c.env);
   return c.json({ ok: true });
 });
 
@@ -525,6 +532,7 @@ adminRoutes.post("/services", async (c) => {
     fail(409, "A plan with that web address already exists");
   }
   await audit(c.env, actor(c), "plan.create", s.slug);
+  await markSiteChanged(c.env);
   return c.json({ ok: true }, 201);
 });
 
@@ -556,6 +564,7 @@ adminRoutes.put("/services/:slug", async (c) => {
     .run();
   if (!res.meta.changes) fail(404, "Plan not found");
   await audit(c.env, actor(c), "plan.update", c.req.param("slug"));
+  await markSiteChanged(c.env);
   return c.json({ ok: true });
 });
 
@@ -568,6 +577,7 @@ adminRoutes.patch("/services/:slug", async (c) => {
     .run();
   if (!res.meta.changes) fail(404, "Plan not found");
   await audit(c.env, actor(c), body.data.archived ? "plan.archive" : "plan.restore", c.req.param("slug"));
+  await markSiteChanged(c.env);
   return c.json({ ok: true });
 });
 
@@ -592,6 +602,7 @@ adminRoutes.delete("/services/:slug", async (c) => {
     if (!shared) imageDeleted = await deleteImage(c.env, plan.image_key, new URL(c.req.url).origin);
   }
   await audit(c.env, actor(c), "plan.delete", slug, imageDeleted ? `image ${plan.image_key}` : "");
+  await markSiteChanged(c.env);
   return c.json({ ok: true, imageDeleted });
 });
 // ---- Hours, days off, booking settings ----
@@ -763,11 +774,9 @@ adminRoutes.delete("/media/:key", async (c) => {
 // ---- Publish: rebuild the static pages so new or changed plans show everywhere ----
 
 adminRoutes.post("/publish", async (c) => {
-  const hook = c.env.DEPLOY_HOOK_URL;
-  if (!hook || !hook.startsWith("https://api.cloudflare.com/")) fail(503, "Publishing isn't set up yet");
+  if (!c.env.DEPLOY_HOOK_URL) fail(503, "Publishing isn't set up yet");
   await readText(c, 1024);
-  const res = await fetch(hook, { method: "POST", signal: AbortSignal.timeout(8000) });
-  if (!res.ok) fail(502, "The website couldn't be rebuilt right now. Please try again.");
+  if (!(await startBuild(c.env))) fail(502, "The website couldn't be rebuilt right now. Please try again.");
   await audit(c.env, actor(c), "site.publish");
   return c.json({ ok: true });
 });

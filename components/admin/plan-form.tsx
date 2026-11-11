@@ -424,7 +424,9 @@ export function PlanForm({
     setBusy(false);
     if (r.ok) {
       onSaved(
-        `${body.name} is saved and live on the booking page. Use Publish to website to update the home and Services pages.`,
+        body.active
+          ? `${body.name} is saved and on the website now.`
+          : `${body.name} is saved. It's hidden: turn on "Show on the website" to show it.`,
       );
     } else setError(r.error);
   }

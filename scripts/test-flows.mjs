@@ -132,7 +132,8 @@ async function freeTime(skip) {
   for (let d = 1; d < 40; d++) {
     const date = new Date(Date.now() + d * 864e5 + 5.5 * 36e5).toISOString().slice(0, 10);
     const { data } = await api(`/api/slots?service=${plan.slug}&date=${date}`, { ip: "10.0.1.1" });
-    if (data.slots?.length > skip) return { date, time: data.slots[skip].value };
+    const free = (data.slots ?? []).filter((s) => s.status === "free");
+    if (free.length > skip) return { date, time: free[skip].value };
   }
 }
 const details = (name) => ({
@@ -221,6 +222,57 @@ const taken = await api("/api/bookings", {
   },
 });
 ok("a booked time can't be booked twice", taken.status === 409, JSON.stringify(taken.data));
+{
+  const day = await api(`/api/slots?service=${plan.slug}&date=${one.time.date}`, { ip: "10.0.1.2" });
+  const mine = day.data.slots?.find((s) => s.value === one.time.time);
+  ok(
+    "the booked time shows as booked (grey) for other clients",
+    mine?.status === "booked",
+    JSON.stringify(mine),
+  );
+  ok(
+    "slot list says nothing about who booked",
+    !JSON.stringify(day.data).includes(CLIENT) && !JSON.stringify(day.data).includes("Asha"),
+  );
+  const days = await api(`/api/days?service=${plan.slug}`, { ip: "10.0.1.2" });
+  ok(
+    "calendar days come back as open, full or closed",
+    Array.isArray(days.data.days) &&
+      days.data.days.length > 5 &&
+      days.data.days.every((d) => ["open", "full", "closed"].includes(d.status)),
+    JSON.stringify(days.data.days?.slice(0, 3)),
+  );
+
+  // Race: several clients press Pay for the same free time at the same moment.
+  const t = await freeTime(0);
+  const racers = await Promise.all(
+    [1, 2, 3, 4].map((i) =>
+      api("/api/bookings", {
+        method: "POST",
+        ip: `10.0.9.${i}`,
+        json: {
+          service: plan.slug,
+          format: plan.formats[0],
+          ...t,
+          agreed: true,
+          details: details(`Racer ${i}`),
+        },
+      }),
+    ),
+  );
+  const won = racers.filter((r) => r.status === 201).length;
+  const lost = racers.filter((r) => r.status === 409).length;
+  ok(
+    "same time, same moment: exactly one client gets it, the rest are told it's taken",
+    won === 1 && lost === 3,
+    racers.map((r) => r.status).join(","),
+  );
+  const after = await api(`/api/slots?service=${plan.slug}&date=${t.date}`, { ip: "10.0.1.3" });
+  ok(
+    "a time being paid for is grey for everyone else",
+    after.data.slots?.find((s) => s.value === t.time)?.status === "booked",
+  );
+}
 
 const again = await api("/api/payments/verify", {
   method: "POST",
@@ -261,10 +313,24 @@ const nobody = await api("/api/admin/login/start", {
 });
 await wait(400);
 ok(
-  "unknown email gets the same reply and no email",
-  nobody.status === 200 && !(await mail()).some((e) => e.to[0] === "someone@example.com"),
+  "an email that isn't an admin is told so straight away, and gets no email",
+  nobody.status === 403 &&
+    /isn't an admin email/.test(nobody.data?.error ?? "") &&
+    !(await mail()).some((e) => e.to[0] === "someone@example.com"),
+  `${nobody.status} ${JSON.stringify(nobody.data)}`,
 );
-await api("/api/admin/login/start", { method: "POST", ip: "10.0.3.2", json: { email: ADMIN } });
+const badShape = await api("/api/admin/login/start", {
+  method: "POST",
+  ip: "10.0.3.5",
+  json: { email: "not-an-email" },
+});
+ok("a mistyped email is refused with a clear message", badShape.status === 400, badShape.data?.error);
+const first = await api("/api/admin/login/start", { method: "POST", ip: "10.0.3.2", json: { email: ADMIN } });
+ok(
+  "the admin is told the code was sent",
+  first.status === 200 && first.data?.sent === true,
+  JSON.stringify(first.data),
+);
 await wait(500);
 const SECOND = "second.admin@example.com";
 const notYet = await api("/api/admin/login/start", {
@@ -274,8 +340,8 @@ const notYet = await api("/api/admin/login/start", {
 });
 await wait(500);
 ok(
-  "an email that isn't an admin gets the same reply and no code",
-  notYet.status === 200 && !(await mail()).some((e) => e.to[0] === SECOND),
+  "an email not yet added as admin is refused and gets no code",
+  notYet.status === 403 && !(await mail()).some((e) => e.to[0] === SECOND),
 );
 const code = (await mail())
   .filter((e) => e.to[0] === ADMIN)
@@ -295,6 +361,8 @@ await wait(700);
 ok(
   "a second code within 30 seconds is not sent, and the first still works",
   tooSoon.status === 200 &&
+    tooSoon.data?.sent === false &&
+    tooSoon.data?.waitSeconds > 0 &&
     (await mail()).filter((e) => e.to[0] === ADMIN && e.subject === "Your admin sign-in code").length ===
       codesBefore,
 );
@@ -514,13 +582,18 @@ ok(
     (await mail()).some((e) => e.to[0] === SECOND && e.subject === "Your admin access was removed"),
   );
   const beforeCodes = (await mail()).length;
-  await api("/api/admin/login/start", { method: "POST", ip: "10.0.4.3", json: { email: SECOND } });
+  const removedTry = await api("/api/admin/login/start", {
+    method: "POST",
+    ip: "10.0.4.3",
+    json: { email: SECOND },
+  });
   await wait(600);
   ok(
-    "a removed admin gets no new code",
-    (await mail())
-      .slice(beforeCodes)
-      .every((e) => e.to[0] !== SECOND || e.subject !== "Your admin sign-in code"),
+    "a removed admin is refused and gets no new code",
+    removedTry.status === 403 &&
+      (await mail())
+        .slice(beforeCodes)
+        .every((e) => e.to[0] !== SECOND || e.subject !== "Your admin sign-in code"),
   );
 
   // At most 10 extra admins.

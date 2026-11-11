@@ -1,5 +1,6 @@
+import { DurationClock } from "@/components/ui/duration-clock";
 import { cn } from "@/lib/cn";
-import { formatDuration, formatPrice } from "@/lib/format";
+import { formatPrice, formatSessionLength } from "@/lib/format";
 import type { Service } from "@/lib/types";
 
 // Small pieces shared by the reading cards and the booking steps.
@@ -17,11 +18,24 @@ export function SampleTag({ className }: { className?: string }) {
   );
 }
 
+/** The session length with a small clock, e.g. "◔ 1 hour session". */
+export function SessionLength({ minutes, className }: { minutes: number; className?: string }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5", className)}>
+      <DurationClock minutes={minutes} className="text-gold-700" />
+      {formatSessionLength(minutes)}
+    </span>
+  );
+}
+
+/** Length and price, e.g. "◔ 1 hour session · ₹199". */
 export function ServiceMeta({ service }: { service: Service }) {
-  const parts = [
-    service.durationMin ? formatDuration(service.durationMin) : null,
-    service.pricePaise ? formatPrice(service.pricePaise) : null,
-  ].filter(Boolean);
-  if (parts.length === 0) return service.sample ? <SampleTag /> : null;
-  return <span className="font-semibold text-ink tabular">{parts.join(" · ")}</span>;
+  if (!service.durationMin && !service.pricePaise) return service.sample ? <SampleTag /> : null;
+  return (
+    <span className="inline-flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-semibold text-ink tabular">
+      {service.durationMin ? <SessionLength minutes={service.durationMin} /> : null}
+      {service.durationMin && service.pricePaise ? <span aria-hidden="true">·</span> : null}
+      {service.pricePaise ? <span>{formatPrice(service.pricePaise)}</span> : null}
+    </span>
+  );
 }

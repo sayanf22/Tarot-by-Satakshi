@@ -10,8 +10,10 @@ import {
   homeCards,
   bookable,
   bookingSettings,
+  daySlots,
   freeSlots,
   publicService,
+  windowDays,
   serviceBySlug,
   unitsFor,
 } from "../lib/data";
@@ -37,10 +39,15 @@ publicRoutes.get("/config", (c) => c.json({ payments: paymentsConfigured(c.env) 
 publicRoutes.get("/services", async (c) => {
   await rateLimit(c, "RL_READ", "services");
   const [services, home] = await Promise.all([activeServices(c.env.DB), homeCards(c.env.DB)]);
-  c.header("Cache-Control", "public, max-age=30");
+  // Never cached, so a plan saved in the admin shows on the next page load.
+  c.header("Cache-Control", "no-store");
   return c.json({ services: services.map(publicService), homeCards: home });
 });
 
+/**
+ * Every start time on a date, each marked free or booked, so the booking page can grey out
+ * times another client has taken or is paying for. Who booked is never sent.
+ */
 publicRoutes.get("/slots", async (c) => {
   await rateLimit(c, "RL_READ", "slots");
   const date = c.req.query("date") ?? "";
@@ -48,8 +55,20 @@ publicRoutes.get("/slots", async (c) => {
   const service = await serviceBySlug(c.env.DB, c.req.query("service") ?? "");
   if (!service) fail(404, "Reading not found");
   const settings = await bookingSettings(c.env.DB);
-  const slots = await freeSlots(c.env.DB, date, service.duration_min ?? settings.slotMinutes);
-  return c.json({ date, slots: slots.map(({ value, label }) => ({ value, label })) });
+  const slots = await daySlots(c.env.DB, date, service.duration_min ?? settings.slotMinutes);
+  c.header("Cache-Control", "no-store");
+  return c.json({ date, slots: slots.map(({ value, label, status }) => ({ value, label, status })) });
+});
+
+/** Each date in the booking window as open, full (every time taken) or closed, for the calendar. */
+publicRoutes.get("/days", async (c) => {
+  await rateLimit(c, "RL_READ", "days");
+  const service = await serviceBySlug(c.env.DB, c.req.query("service") ?? "");
+  if (!service) fail(404, "Reading not found");
+  const settings = await bookingSettings(c.env.DB);
+  const days = await windowDays(c.env.DB, service.duration_min ?? settings.slotMinutes);
+  c.header("Cache-Control", "no-store");
+  return c.json({ days });
 });
 
 publicRoutes.post("/contact", async (c) => {

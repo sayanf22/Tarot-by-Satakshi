@@ -4,7 +4,8 @@ import { ArrowRight, MessageCircle, PhoneCall } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ButtonLink, buttonClasses } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { formatDuration, formatPrice } from "@/lib/format";
+import { SessionLength } from "@/components/services/service-card";
+import { formatPrice } from "@/lib/format";
 import { site } from "@/lib/site";
 import { categoryLabels, sessionLabel, type Service } from "@/lib/types";
 
@@ -51,9 +52,10 @@ export function PricingRow({ s }: { s: Service & { pricePaise: number } }) {
             <p className="eyebrow">{categoryLabels[s.category]}</p>
             <h2 className="mt-2 text-2xl">{s.name}</h2>
             {s.summary ? <p className="mt-2 text-ink">{s.summary}</p> : null}
-            <p className="mt-3 text-sm font-semibold text-ink">
-              {sessionLabel(s.formats)}
-              {s.durationMin ? ` · ${formatDuration(s.durationMin)}` : ""}
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-ink">
+              {s.durationMin ? <SessionLength minutes={s.durationMin} /> : null}
+              {s.durationMin ? <span aria-hidden="true">·</span> : null}
+              {sessionLabel(s.formats).replace(/ session$/, "")}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 @4xl:shrink-0 @4xl:flex-col @4xl:items-end">

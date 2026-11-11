@@ -1,5 +1,5 @@
 import type { AppEnv } from "../env";
-import { UNIT_MS, unitsFor } from "./data";
+import { unitsFor } from "./data";
 import { sendBookingEmails, sendRefundEmails } from "./email";
 import { audit } from "./logs";
 import {
@@ -78,7 +78,9 @@ export async function settlePayment(
 
   const now = Date.now();
   const db = env.DB;
-  const expected = Math.round((booking.end_at - booking.start_at) / UNIT_MS);
+  // The same blocks the booking claimed when it was made (see unitsFor).
+  const blocks = unitsFor(booking.start_at, Math.round((booking.end_at - booking.start_at) / MINUTE));
+  const expected = blocks.length;
   const markPaid = db
     .prepare(
       `UPDATE payments SET status = 'paid', gateway_payment_id = ?1, method = ?2, updated_at = ?3
@@ -106,9 +108,9 @@ export async function settlePayment(
             `DELETE FROM booking_slot_units WHERE unit_start IN (SELECT value FROM json_each(?1))
              AND booking_id IN (SELECT id FROM bookings WHERE status IN ('held', 'expired') AND hold_expires_at <= ?2 AND id != ?3)`,
           )
-          .bind(JSON.stringify(unitsFor(booking.start_at, expected * 15)), now, booking.id),
+          .bind(JSON.stringify(blocks), now, booking.id),
         db.prepare("DELETE FROM booking_slot_units WHERE booking_id = ?1").bind(booking.id),
-        ...unitsFor(booking.start_at, expected * 15).map((u) =>
+        ...blocks.map((u) =>
           db
             .prepare("INSERT INTO booking_slot_units (unit_start, booking_id) VALUES (?1, ?2)")
             .bind(u, booking.id),

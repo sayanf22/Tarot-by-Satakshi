@@ -6,8 +6,8 @@ import { escapeHtml, sendMail } from "./email";
 import { clientIp, fail, requireSameOrigin } from "./http";
 
 // Admin sign-in by emailed one-time code (Resend). No passwords.
-// 1. The admin enters her email. If it's on ADMIN_EMAILS, a random 6-digit code is
-//    emailed. The reply is the same either way, so nobody can test which emails work.
+// 1. The admin enters her email. If it's an admin (ADMIN_EMAILS or the admin_users table),
+//    a random 6-digit code is emailed; any other address is told it isn't an admin email.
 // 2. She enters the code. It expires after 10 minutes, works once, and allows 5 tries;
 //    a new code cancels the old one. Only an HMAC of the code is stored.
 // 3. A session is a random token in a __Host- cookie (HttpOnly, Secure,
@@ -113,32 +113,38 @@ async function lockedOut(c: Context<AppContext>, ip: string) {
 /** Gap between two code emails for one address, so nobody can flood an admin's inbox. */
 const CODE_GAP_MS = 30 * 1000;
 
+export type StartResult = { sent: true } | { sent: false; waitSeconds: number };
+
 /**
- * Step 1: email a code if the address is an admin. The reply (and its speed) is the same
- * for every address: the code is made and emailed in the background, so nobody can tell
- * an admin address from any other by the answer.
+ * Step 1: email a code if the address is an admin. An address that isn't an admin is told
+ * so at once (the owner asked for this; the main admin address is public on the Contact
+ * page anyway). Guessing is slowed by the 5-a-minute limit per visitor (RL_LOGIN) and the
+ * 15-minute lockout. The code itself is still the only way in.
  */
-export async function startLogin(c: Context<AppContext>, rawEmail: string) {
+export async function startLogin(c: Context<AppContext>, rawEmail: string): Promise<StartResult> {
   if (!adminConfigured(c)) fail(503, "Email sign-in isn't set up yet");
   requireSameOrigin(c);
   const email = rawEmail.trim().toLowerCase();
   if (await lockedOut(c, await ipHash(c))) fail(429, "Too many tries. Please wait 15 minutes.");
-  if (!(await isAdmin(c, email))) return;
-  c.executionCtx.waitUntil(issueCode(c, email));
+  if (!(await isAdmin(c, email)))
+    fail(403, "This email isn't an admin email. Check the spelling, or ask the main admin to add it.");
+  return issueCode(c, email);
 }
 
-async function issueCode(c: Context<AppContext>, email: string) {
+async function issueCode(c: Context<AppContext>, email: string): Promise<StartResult> {
+  const now = Date.now();
+  const recent = await c.env.DB.prepare(
+    "SELECT count(*) AS n, max(created_at) AS last FROM admin_login_codes WHERE email = ?1 AND created_at > ?2",
+  )
+    .bind(email, now - 60 * 60 * 1000)
+    .first<{ n: number; last: number | null }>();
+  if ((recent?.n ?? 0) >= CODES_PER_HOUR)
+    fail(429, "Too many codes for this email in the last hour. Use the latest code, or try again later.");
+  // Too soon after the last code: the last one still works, so say how long to wait.
+  if (recent?.last && now - recent.last < CODE_GAP_MS)
+    return { sent: false, waitSeconds: Math.ceil((CODE_GAP_MS - (now - recent.last)) / 1000) };
+  const id = randomToken(12);
   try {
-    const now = Date.now();
-    const recent = await c.env.DB.prepare(
-      "SELECT count(*) AS n, max(created_at) AS last FROM admin_login_codes WHERE email = ?1 AND created_at > ?2",
-    )
-      .bind(email, now - 60 * 60 * 1000)
-      .first<{ n: number; last: number | null }>();
-    if ((recent?.n ?? 0) >= CODES_PER_HOUR) return; // quietly stop: no email flood
-    if (recent?.last && now - recent.last < CODE_GAP_MS) return; // too soon after the last one
-
-    const id = randomToken(12);
     const code = sixDigits();
     await c.env.DB.batch([
       // A new code cancels any earlier unused one.
@@ -150,7 +156,7 @@ async function issueCode(c: Context<AppContext>, email: string) {
         "INSERT INTO admin_login_codes (id, email, code_hash, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)",
       ).bind(id, email, await codeHash(c, id, code), now, now + CODE_MS),
     ]);
-    await sendMail(c.env, {
+    const delivered = await sendMail(c.env, {
       kind: "admin.code",
       to: email,
       ref: id,
@@ -164,8 +170,16 @@ async function issueCode(c: Context<AppContext>, email: string) {
 <p style="color:#5a5145;line-height:1.6">This email never contains a link. If you didn't ask for a code, ignore it: nobody can sign in without the code.</p>
 </div></body></html>`,
     });
+    if (!delivered) throw new Error("email not accepted");
+    return { sent: true };
   } catch (err) {
     console.error("sign-in code failed", err instanceof Error ? err.message : "");
+    // The email never left, so drop its code: the admin can ask again straight away.
+    await c.env.DB.prepare("DELETE FROM admin_login_codes WHERE id = ?1")
+      .bind(id)
+      .run()
+      .catch(() => {});
+    fail(502, "The code email couldn't be sent just now. Please try again in a minute.");
   }
 }
 /** Step 2: check the code and start a session. */

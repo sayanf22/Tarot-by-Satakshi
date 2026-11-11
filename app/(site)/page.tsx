@@ -13,7 +13,7 @@ import {
 import { Mandala } from "@/components/art/mandala";
 import { Particles } from "@/components/art/particles";
 import { HeroFan } from "@/components/home/hero-fan";
-import { ReadingsDeck } from "@/components/home/readings-deck";
+import { ReadingsSection } from "@/components/home/readings-section";
 import { SessionChoice } from "@/components/home/session-panel";
 import { WordBand } from "@/components/home/word-bands";
 import { Photo } from "@/components/media/photo";
@@ -21,7 +21,6 @@ import { Reveal } from "@/components/motion/reveal";
 import { SplitWords } from "@/components/motion/split-words";
 import { AskPanel } from "@/components/sections/ask-panel";
 import { FaqList } from "@/components/sections/faq-list";
-import { ReadingsSoon } from "@/components/sections/readings-soon";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { RuleTitle } from "@/components/ui/rule-title";
@@ -132,21 +131,7 @@ export default function HomePage() {
         <Container>
           <RuleTitle eyebrow="Readings" title="Choose your reading" />
           <div className="mt-12 lg:mt-14">
-            {services.length ? (
-              <>
-                <ReadingsDeck services={services.slice(0, homeCards)} />
-                {services.length > homeCards ? (
-                  <div className="mt-10 flex justify-center">
-                    <ButtonLink href="/services" variant="outline">
-                      See all {services.length} readings
-                      <ArrowRight className="size-4" aria-hidden="true" />
-                    </ButtonLink>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <ReadingsSoon />
-            )}
+            <ReadingsSection built={services} homeCards={homeCards} />
           </div>
         </Container>
       </section>

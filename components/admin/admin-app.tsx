@@ -33,6 +33,9 @@ type Tab = (typeof tabs)[number]["id"];
 
 type Auth = "checking" | "off" | "out" | "in";
 
+/** A quick shape check before asking the server (it checks again). */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 function SignIn({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
@@ -43,26 +46,43 @@ function SignIn({ onDone }: { onDone: () => void }) {
   const resend = useCooldown("admin-code");
   const resendIn = resend.secondsLeft;
   const [sentTo, setSentTo] = useState("");
+  const [notice, setNotice] = useState("");
 
   async function sendCode(e?: FormEvent) {
     e?.preventDefault();
+    const address = email.trim().toLowerCase();
     // Only a repeat request for the same address waits; a different address can go at once.
-    if (resend.active && email.trim().toLowerCase() === sentTo) {
+    if (resend.active && address === sentTo) {
       if (step === "email") setStep("code");
       return;
     }
-    setBusy(true);
     setError(null);
-    const r = await api("/api/admin/login/start", { method: "POST", json: { email: email.trim() } });
+    if (!EMAIL_RE.test(address)) {
+      setStep("email");
+      return setError("That doesn't look like an email address. Please check it.");
+    }
+    setBusy(true);
+    const r = await api<{ sent: boolean; waitSeconds?: number }>("/api/admin/login/start", {
+      method: "POST",
+      json: { email: address },
+    });
     setBusy(false);
     if (!r.ok) {
+      // Not an admin, or too many tries: stay on the email box and say why.
+      setStep("email");
       if (r.status === 429) resend.start(60);
+      requestAnimationFrame(() => document.getElementById("a-email")?.focus());
       return setError(r.error);
     }
     setStep("code");
     setCode("");
-    setSentTo(email.trim().toLowerCase());
-    resend.start(45);
+    setSentTo(address);
+    setNotice(
+      r.data.sent
+        ? `A 6-digit code has been sent to ${address}. Check your inbox (and spam).`
+        : `A code was sent to ${address} moments ago. Use that one, or ask for a new one in a few seconds.`,
+    );
+    resend.start(r.data.sent ? 45 : Math.max(5, r.data.waitSeconds ?? 30));
     // Move focus to the code box for keyboard and screen-reader users.
     requestAnimationFrame(() => document.getElementById("a-code")?.focus());
   }
@@ -91,12 +111,12 @@ function SignIn({ onDone }: { onDone: () => void }) {
           <h1 className="mt-6 font-display text-3xl">Admin sign-in</h1>
           <p className="mt-2 text-sm text-ink-muted">
             {step === "email"
-              ? "For authorised admins only. There are no accounts to create here. Enter your admin email and, if it is authorised, a one-time code is sent to it."
-              : `If ${email.trim()} is an authorised admin email, a 6-digit code has been sent to it.`}
+              ? "For authorised admins only. There are no accounts to create here. Enter your admin email to get a one-time code."
+              : notice}
           </p>
         </div>
         {step === "email" ? (
-          <form onSubmit={sendCode} className="mt-6 space-y-5">
+          <form onSubmit={sendCode} noValidate className="mt-6 space-y-5">
             <Field id="a-email" label="Email">
               <TextInput
                 id="a-email"
@@ -106,7 +126,11 @@ function SignIn({ onDone }: { onDone: () => void }) {
                 autoCapitalize="none"
                 spellCheck={false}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError(null);
+                }}
+                aria-invalid={Boolean(error)}
                 required
               />
             </Field>
@@ -140,7 +164,10 @@ function SignIn({ onDone }: { onDone: () => void }) {
               <button
                 type="button"
                 className="font-semibold text-gold-800 hover:underline"
-                onClick={() => setStep("email")}
+                onClick={() => {
+                  setError(null);
+                  setStep("email");
+                }}
               >
                 Use another email
               </button>

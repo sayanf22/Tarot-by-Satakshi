@@ -7,6 +7,7 @@ import { FlipCard } from "@/components/cards/flip-card";
 import { useHoverTurn } from "@/components/cards/use-hover-turn";
 import { TarotImage, TarotLineArt } from "@/components/media/tarot-image";
 import { SampleTag } from "@/components/services/service-card";
+import { DurationClock } from "@/components/ui/duration-clock";
 import { GlyphOrnament } from "@/components/ui/service-glyph";
 import { cn } from "@/lib/cn";
 import { formatDuration, formatPrice } from "@/lib/format";
@@ -47,10 +48,7 @@ function ReadingBack({
   onTurnBack: (e: MouseEvent<HTMLButtonElement>) => void;
   bookRef: RefObject<HTMLAnchorElement | null>;
 }) {
-  const meta = [
-    service.durationMin ? formatDuration(service.durationMin) : null,
-    service.pricePaise ? formatPrice(service.pricePaise) : null,
-  ].filter(Boolean);
+  const hasMeta = Boolean(service.durationMin || service.pricePaise);
 
   return (
     <div className="grain-dark relative size-full rounded-[8cqw] bg-night p-[3.5cqw] shadow-lift ring-1 ring-night">
@@ -66,14 +64,25 @@ function ReadingBack({
         <p className="mt-[4cqw] font-display text-[max(1.25rem,8cqw)] leading-[1.05] text-white">
           {service.name}
         </p>
-        <p className="mt-[2cqw] flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[max(0.8rem,4.6cqw)] font-semibold text-mist">
+        <p className="mt-[2cqw] text-[max(0.8rem,4.6cqw)] font-semibold text-mist">
           {sessionLabel(service.formats)}
-          {meta.length ? (
-            <span className="text-gold-300 tabular">{meta.join(" · ")}</span>
-          ) : service.sample ? (
-            <SampleTag />
-          ) : null}
         </p>
+        {hasMeta ? (
+          <p className="mt-[1.5cqw] flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[max(0.8rem,4.6cqw)] font-semibold text-gold-300 tabular">
+            {service.durationMin ? (
+              <span className="inline-flex items-center gap-1.5">
+                <DurationClock minutes={service.durationMin} />
+                {formatDuration(service.durationMin)}
+              </span>
+            ) : null}
+            {service.durationMin && service.pricePaise ? <span aria-hidden="true">·</span> : null}
+            {service.pricePaise ? <span>{formatPrice(service.pricePaise)}</span> : null}
+          </p>
+        ) : service.sample ? (
+          <p className="mt-[1.5cqw]">
+            <SampleTag />
+          </p>
+        ) : null}
         <Link
           ref={bookRef}
           href={`/book?service=${service.slug}`}

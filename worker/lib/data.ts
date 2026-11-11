@@ -93,13 +93,109 @@ export async function bookingSettings(db: D1Database): Promise<BookingSettings> 
 /** Bookings are stored in 15-minute blocks; a slot is free when none of its blocks is taken. */
 export const UNIT_MS = 15 * MINUTE;
 
+/**
+ * The 15-minute blocks a session covers, on a fixed grid (IST is UTC+5:30, so the grid
+ * is the same in both). A start or length that isn't on the grid still claims every block
+ * it touches, so two sessions that overlap by even a minute always share a block and the
+ * database's primary key refuses the second one.
+ */
 export function unitsFor(startAt: number, durationMin: number) {
+  const first = Math.floor(startAt / UNIT_MS) * UNIT_MS;
+  const end = startAt + durationMin * MINUTE;
   const units: number[] = [];
-  for (let t = startAt; t < startAt + durationMin * MINUTE; t += UNIT_MS) units.push(t);
+  for (let t = first; t < end; t += UNIT_MS) units.push(t);
   return units;
 }
 
-export type Slot = { value: string; label: string; startAt: number };
+export type SlotStatus = "free" | "booked";
+export type Slot = { value: string; label: string; startAt: number; status: SlotStatus };
+
+type Rule = { weekday: number; enabled: number; open_min: number; close_min: number };
+type Override = { date: string; closed: number; open_min: number | null; close_min: number | null };
+
+/** Everything needed to work out the times for a range of dates, read in one go. */
+async function loadAvailability(
+  db: D1Database,
+  from: string,
+  to: string,
+  now: number,
+  ignoreBooking: string,
+) {
+  const [settings, rules, overrides, taken] = await Promise.all([
+    bookingSettings(db),
+    db
+      .prepare("SELECT weekday, enabled, open_min, close_min FROM availability_rules")
+      .all<Rule>()
+      .then((r) => new Map(r.results.map((x) => [x.weekday, x]))),
+    db
+      .prepare(
+        "SELECT date, closed, open_min, close_min FROM availability_overrides WHERE date >= ?1 AND date <= ?2",
+      )
+      .bind(from, to)
+      .all<Override>()
+      .then((r) => new Map(r.results.map((x) => [x.date, x]))),
+    db
+      .prepare(
+        `SELECT u.unit_start FROM booking_slot_units u
+         JOIN bookings b ON b.id = u.booking_id
+         WHERE u.unit_start >= ?1 AND u.unit_start < ?2 AND b.id != ?4
+           AND (b.status IN ('confirmed', 'completed') OR (b.status = 'held' AND b.hold_expires_at > ?3))`,
+      )
+      .bind(istToUtc(from, 0), istToUtc(addDaysIso(to, 1), 0), now, ignoreBooking)
+      .all<{ unit_start: number }>()
+      .then((r) => new Set(r.results.map((x) => x.unit_start))),
+  ]);
+  return { settings, rules, overrides, taken, now };
+}
+
+type Availability = Awaited<ReturnType<typeof loadAvailability>>;
+
+/** Opening hours for one date, after any day off or changed hours. Null when closed. */
+function hoursOn(av: Availability, date: string) {
+  const rule = av.rules.get(weekdayOf(date));
+  const override = av.overrides.get(date);
+  let open: number | null = rule?.enabled ? rule.open_min : null;
+  let close: number | null = rule?.enabled ? rule.close_min : null;
+  if (override) {
+    if (override.closed) return null;
+    if (override.open_min != null && override.close_min != null) {
+      open = override.open_min;
+      close = override.close_min;
+    }
+  }
+  return open == null || close == null || close <= open ? null : { open, close };
+}
+
+/** Bookable start times on one date (past and too-soon times left out), each free or booked. */
+function slotsOn(av: Availability, date: string, durationMin: number): Slot[] | null {
+  const today = istToday(av.now);
+  if (date < today || date > addDaysIso(today, av.settings.windowDays)) return null;
+  const hours = hoursOn(av, date);
+  if (!hours) return null;
+  const earliest = av.now + av.settings.minNoticeMinutes * MINUTE;
+  const slots: Slot[] = [];
+  // Start on a quarter hour, so neighbouring sessions never share a 15-minute block.
+  const first = Math.ceil(hours.open / 15) * 15;
+  for (let m = first; m + durationMin <= hours.close; m += av.settings.slotMinutes) {
+    const startAt = istToUtc(date, m);
+    if (startAt < earliest) continue;
+    const booked = unitsFor(startAt, durationMin).some((u) => av.taken.has(u));
+    slots.push({ value: hhmm(m), label: timeLabel(m), startAt, status: booked ? "booked" : "free" });
+  }
+  return slots;
+}
+
+/** Every start time on one IST date, marked free or booked. Empty when the day is closed. */
+export async function daySlots(
+  db: D1Database,
+  date: string,
+  durationMin: number,
+  now = Date.now(),
+  ignoreBooking = "",
+) {
+  const av = await loadAvailability(db, date, date, now, ignoreBooking);
+  return slotsOn(av, date, durationMin) ?? [];
+}
 
 /**
  * Free start times on one IST date for a session of `durationMin`.
@@ -114,52 +210,25 @@ export async function freeSlots(
   /** When moving a booking, its own blocks don't count as taken. */
   ignoreBooking = "",
 ) {
-  const settings = await bookingSettings(db);
+  return (await daySlots(db, date, durationMin, now, ignoreBooking)).filter((s) => s.status === "free");
+}
+
+export type DayStatus = "open" | "full" | "closed";
+
+/** For each date in the booking window: open (a free time exists), full, or closed. */
+export async function windowDays(db: D1Database, durationMin: number, now = Date.now()) {
   const today = istToday(now);
-  if (date < today || date > addDaysIso(today, settings.windowDays)) return [];
-
-  const [rule, override] = await Promise.all([
-    db
-      .prepare("SELECT enabled, open_min, close_min FROM availability_rules WHERE weekday = ?1")
-      .bind(weekdayOf(date))
-      .first<{ enabled: number; open_min: number; close_min: number }>(),
-    db
-      .prepare("SELECT closed, open_min, close_min FROM availability_overrides WHERE date = ?1")
-      .bind(date)
-      .first<{ closed: number; open_min: number | null; close_min: number | null }>(),
-  ]);
-
-  let open: number | null = rule?.enabled ? rule.open_min : null;
-  let close: number | null = rule?.enabled ? rule.close_min : null;
-  if (override) {
-    if (override.closed) return [];
-    if (override.open_min != null && override.close_min != null) {
-      open = override.open_min;
-      close = override.close_min;
-    }
+  const settings = await bookingSettings(db);
+  const last = addDaysIso(today, settings.windowDays);
+  const av = await loadAvailability(db, today, last, now, "");
+  const days: { date: string; status: DayStatus }[] = [];
+  for (let date = today; date <= last; date = addDaysIso(date, 1)) {
+    const slots = slotsOn(av, date, durationMin);
+    days.push({
+      date,
+      status:
+        !slots || slots.length === 0 ? "closed" : slots.some((s) => s.status === "free") ? "open" : "full",
+    });
   }
-  if (open == null || close == null || close <= open) return [];
-
-  const dayStart = istToUtc(date, open);
-  const dayEnd = istToUtc(date, close);
-  const { results } = await db
-    .prepare(
-      `SELECT u.unit_start FROM booking_slot_units u
-       JOIN bookings b ON b.id = u.booking_id
-       WHERE u.unit_start >= ?1 AND u.unit_start < ?2 AND b.id != ?4
-         AND (b.status IN ('confirmed', 'completed') OR (b.status = 'held' AND b.hold_expires_at > ?3))`,
-    )
-    .bind(dayStart, dayEnd, now, ignoreBooking)
-    .all<{ unit_start: number }>();
-  const taken = new Set(results.map((r) => r.unit_start));
-
-  const earliest = now + settings.minNoticeMinutes * MINUTE;
-  const slots: Slot[] = [];
-  for (let m = open; m + durationMin <= close; m += settings.slotMinutes) {
-    const startAt = istToUtc(date, m);
-    if (startAt < earliest) continue;
-    if (unitsFor(startAt, durationMin).some((u) => taken.has(u))) continue;
-    slots.push({ value: hhmm(m), label: timeLabel(m), startAt });
-  }
-  return slots;
+  return days;
 }

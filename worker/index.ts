@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import type { AppContext, AppEnv } from "./env";
 import { maintenance } from "./lib/bookings";
+import { publishIfChanged } from "./lib/publish";
 import { KEY_PATTERN, SHARDS, shardDb } from "./lib/media";
 import { rateLimit } from "./lib/rate-limit";
 import { adminRoutes } from "./routes/admin";
@@ -117,6 +118,18 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   async scheduled(_controller, env, ctx) {
+    // Rebuild the static pages if a plan changed (independent of the clean-up below).
+    ctx.waitUntil(
+      publishIfChanged(env).catch((err) =>
+        console.error(
+          JSON.stringify({
+            level: "error",
+            msg: "auto publish failed",
+            error: err instanceof Error ? err.message : "unknown",
+          }),
+        ),
+      ),
+    );
     ctx.waitUntil(
       maintenance(env, ctx).catch((err) =>
         console.error(

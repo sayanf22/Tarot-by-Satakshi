@@ -1,10 +1,9 @@
 import { MessageCircle, PhoneCall } from "lucide-react";
 import { TarotArt } from "@/components/art/tarot-art";
 import { ReadingsSoon } from "@/components/sections/readings-soon";
-import { SampleTag } from "@/components/services/service-card";
+import { ServiceMeta } from "@/components/services/service-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { formatDuration, formatPrice } from "@/lib/format";
 import { categoryLabels, type Service, type SessionFormat } from "@/lib/types";
 
 const formatOptions: Record<SessionFormat, { title: string; text: string; icon: typeof PhoneCall }> = {
@@ -47,16 +46,8 @@ export function ServiceChoice({
         <span className="mt-0.5 block text-sm text-ink-muted">
           {categoryLabels[s.category]} · {s.summary}
         </span>
-        <span className="mt-2 block text-sm">
-          {s.durationMin || s.pricePaise ? (
-            <span className="font-semibold text-ink tabular">
-              {[s.durationMin && formatDuration(s.durationMin), s.pricePaise && formatPrice(s.pricePaise)]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-          ) : s.sample ? (
-            <SampleTag />
-          ) : null}
+        <span className="mt-2 flex text-sm">
+          <ServiceMeta service={s} />
         </span>
       </span>
     </label>
