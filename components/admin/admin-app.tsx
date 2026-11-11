@@ -6,6 +6,7 @@ import { Wordmark } from "@/components/brand/wordmark";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { api } from "@/lib/api";
+import { useCooldown } from "@/lib/use-cooldown";
 import { cn } from "@/lib/cn";
 import { AdminAccount } from "./account";
 import { AdminBookings } from "./bookings";
@@ -38,24 +39,30 @@ function SignIn({ onDone }: { onDone: () => void }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [resendIn, setResendIn] = useState(0);
-
-  useEffect(() => {
-    if (resendIn <= 0) return;
-    const t = setTimeout(() => setResendIn(resendIn - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendIn]);
+  // Pause between code requests; kept across a page refresh. The Worker enforces its own limits.
+  const resend = useCooldown("admin-code");
+  const resendIn = resend.secondsLeft;
+  const [sentTo, setSentTo] = useState("");
 
   async function sendCode(e?: FormEvent) {
     e?.preventDefault();
+    // Only a repeat request for the same address waits; a different address can go at once.
+    if (resend.active && email.trim().toLowerCase() === sentTo) {
+      if (step === "email") setStep("code");
+      return;
+    }
     setBusy(true);
     setError(null);
     const r = await api("/api/admin/login/start", { method: "POST", json: { email: email.trim() } });
     setBusy(false);
-    if (!r.ok) return setError(r.error);
+    if (!r.ok) {
+      if (r.status === 429) resend.start(60);
+      return setError(r.error);
+    }
     setStep("code");
     setCode("");
-    setResendIn(45);
+    setSentTo(email.trim().toLowerCase());
+    resend.start(45);
     // Move focus to the code box for keyboard and screen-reader users.
     requestAnimationFrame(() => document.getElementById("a-code")?.focus());
   }
@@ -84,8 +91,8 @@ function SignIn({ onDone }: { onDone: () => void }) {
           <h1 className="mt-6 font-display text-3xl">Admin sign-in</h1>
           <p className="mt-2 text-sm text-ink-muted">
             {step === "email"
-              ? "We'll email you a one-time code. No password needed."
-              : `If ${email.trim()} is an admin address, a 6-digit code is on its way.`}
+              ? "For authorised admins only. There are no accounts to create here. Enter your admin email and, if it is authorised, a one-time code is sent to it."
+              : `If ${email.trim()} is an authorised admin email, a 6-digit code has been sent to it.`}
           </p>
         </div>
         {step === "email" ? (
@@ -106,7 +113,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
             {error ? <Notice tone="error">{error}</Notice> : null}
             <Button type="submit" className="w-full" disabled={busy}>
               <Mail className="size-4" aria-hidden="true" />
-              {busy ? "Sending…" : "Email me a code"}
+              {busy ? "Sending…" : "Send my code"}
             </Button>
           </form>
         ) : (
@@ -140,7 +147,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
               <button
                 type="button"
                 className="font-semibold text-gold-800 hover:underline disabled:text-ink-muted disabled:no-underline"
-                disabled={resendIn > 0 || busy}
+                disabled={(resendIn > 0 && email.trim().toLowerCase() === sentTo) || busy}
                 onClick={() => void sendCode()}
               >
                 {resendIn > 0 ? `Send again in ${resendIn}s` : "Send a new code"}

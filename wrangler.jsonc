@@ -91,7 +91,10 @@
   "ratelimits": [
     { "name": "RL_READ", "namespace_id": "7101", "simple": { "limit": 60, "period": 60 } },
     { "name": "RL_FORM", "namespace_id": "7102", "simple": { "limit": 5, "period": 60 } },
-    { "name": "RL_LOGIN", "namespace_id": "7103", "simple": { "limit": 5, "period": 60 } }
+    { "name": "RL_LOGIN", "namespace_id": "7103", "simple": { "limit": 5, "period": 60 } },
+    // Every admin request (before sign-in too), and admin changes (after sign-in).
+    { "name": "RL_ADMIN", "namespace_id": "7104", "simple": { "limit": 120, "period": 60 } },
+    { "name": "RL_ADMIN_WRITE", "namespace_id": "7105", "simple": { "limit": 30, "period": 60 } }
   ],
   // Every 10 minutes: release lapsed holds, catch any payment whose webhook was
   // missed, and prune old records. Free plan allows 5 cron triggers per account.
@@ -109,7 +112,9 @@
   "preview_urls": false,
   "vars": {
     // Who may sign in to /admin (comma-separated). A one-time code is emailed to them via Resend.
-    "ADMIN_EMAILS": "tarotwithsatakshi@gmail.com,sayanbanik66@gmail.com",
+    // Super admin: can't be removed, and is the only one who can add or remove other
+    // admins (Account page). Other admins live in the admin_users table.
+    "ADMIN_EMAILS": "tarotwithsatakshi@gmail.com",
     // Where booking alerts and contact messages go. Client emails reply to this address.
     "NOTIFY_EMAIL": "tarotwithsatakshi@gmail.com",
     // Sender for every email. The domain is verified in Resend (DKIM and the send.

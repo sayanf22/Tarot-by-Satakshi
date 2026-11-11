@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import type { AppContext } from "../env";
 import { clientIp, fail } from "./http";
 
-type Limiter = "RL_READ" | "RL_FORM" | "RL_LOGIN";
+type Limiter = "RL_READ" | "RL_FORM" | "RL_LOGIN" | "RL_ADMIN" | "RL_ADMIN_WRITE";
 
 /**
  * Per-visitor limit using Cloudflare's Rate Limiting binding (counted at the edge,

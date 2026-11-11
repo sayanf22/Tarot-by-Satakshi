@@ -10,6 +10,7 @@ import { TurnstileField } from "@/components/ui/turnstile-field";
 import { api } from "@/lib/api";
 import { openCheckout, type Checkout } from "@/lib/booking/razorpay-checkout";
 import { site } from "@/lib/site";
+import { useCooldown } from "@/lib/use-cooldown";
 import { formatLabels, type Service, type SessionFormat } from "@/lib/types";
 import { topicLabel, type BookingDetails } from "@/lib/validation/booking";
 import type { StepNumber } from "./step-indicator";
@@ -75,6 +76,8 @@ export function StepReview({
   const [started, setStarted] = useState<Started | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const turnstile = useRef<TurnstileInstance | undefined>(undefined);
+  // A short pause after a failed attempt (the Worker also limits to 5 booking attempts a minute).
+  const retryPause = useCooldown();
 
   const needsBirth = service.category === "astrology";
   const birthTime = details.birthTimeUnknown
@@ -112,6 +115,7 @@ export function StepReview({
       if (!res.ok) {
         setPhase("idle");
         setError(res.error);
+        retryPause.start(res.status === 429 ? 30 : 4);
         return;
       }
       s = res.data;
@@ -225,7 +229,7 @@ export function StepReview({
             ) : null}
             <Button
               className="mt-6 w-full"
-              disabled={!agreed || busy || (!started && !token)}
+              disabled={!agreed || busy || retryPause.active || (!started && !token)}
               onClick={() => void pay(started)}
             >
               <Lock className="size-4" aria-hidden="true" />

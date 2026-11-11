@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { describedBy, Field, TextArea, TextInput } from "@/components/ui/field";
 import { TurnstileField } from "@/components/ui/turnstile-field";
 import { site } from "@/lib/site";
+import { useCooldown } from "@/lib/use-cooldown";
 import { contactSchema, type ContactInput } from "@/lib/validation/contact";
 
 type Status = "idle" | "sent" | "error";
@@ -19,6 +20,8 @@ export function ContactForm() {
   const [status, setStatus] = useState<Status>("idle");
   const [token, setToken] = useState<string | null>(null);
   const turnstile = useRef<TurnstileInstance | undefined>(undefined);
+  // A short pause after each attempt (the Worker also limits to 5 a minute per visitor).
+  const cooldown = useCooldown("contact");
   const {
     register,
     handleSubmit,
@@ -31,7 +34,9 @@ export function ContactForm() {
   });
 
   async function onSubmit(values: ContactInput) {
+    if (cooldown.active) return;
     setStatus("idle");
+    cooldown.start(20);
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
@@ -126,8 +131,12 @@ export function ContactForm() {
 
           <TurnstileField ref={turnstile} action="contact" onToken={setToken} />
 
-          <Button type="submit" disabled={isSubmitting || !token} className="w-full sm:w-auto">
-            {isSubmitting ? "Sending…" : "Send message"}
+          <Button
+            type="submit"
+            disabled={isSubmitting || !token || cooldown.active}
+            className="w-full sm:w-auto"
+          >
+            {isSubmitting ? "Sending…" : cooldown.active ? `Wait ${cooldown.secondsLeft}s` : "Send message"}
           </Button>
         </form>
       )}

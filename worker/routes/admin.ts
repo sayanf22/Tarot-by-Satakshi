@@ -1,17 +1,20 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../env";
 import {
   adminConfigured,
   adminEmails,
+  extraAdmins,
   finishLogin,
+  isSuperAdmin,
   logout,
+  MAX_EXTRA_ADMINS,
   requireAdmin,
   sendSignInAlert,
   startLogin,
 } from "../lib/auth";
 import { freeSlots, HOME_CARDS, homeCards, unitsFor, type ServiceRow } from "../lib/data";
-import { sendCancelEmail, sendMovedEmails, sendRefundEmails } from "../lib/email";
+import { sendAdminChangeEmails, sendCancelEmail, sendMovedEmails, sendRefundEmails } from "../lib/email";
 import { fail, readJson, readText } from "../lib/http";
 import { audit } from "../lib/logs";
 import {
@@ -51,6 +54,7 @@ adminRoutes.use("*", async (c, next) => {
   if (host !== main && host !== "127.0.0.1" && host !== "localhost")
     return c.json({ error: "Not found" }, 404);
   c.header("Cache-Control", "no-store");
+  await rateLimit(c, "RL_ADMIN", "admin");
   await next();
 });
 
@@ -81,6 +85,11 @@ adminRoutes.post("/login/verify", async (c) => {
 // ---- Everything below needs a session ----
 
 adminRoutes.use("*", requireAdmin);
+// Anything that changes data is limited more tightly than reading.
+adminRoutes.use("*", async (c, next) => {
+  if (c.req.method !== "GET" && c.req.method !== "HEAD") await rateLimit(c, "RL_ADMIN_WRITE", "admin-write");
+  await next();
+});
 
 adminRoutes.post("/logout", async (c) => {
   const everywhere = c.req.query("everywhere") === "1";
@@ -103,11 +112,70 @@ adminRoutes.get("/account", async (c) => {
   ]);
   return c.json({
     email: actor(c),
-    admins: adminEmails(c),
     sessionExpires: c.get("sessionExpires"),
     activeSessions: sessions?.n ?? 0,
     recentSignIns: recent.results,
   });
+});
+// ---- Who can sign in ----
+// The main admin (ADMIN_EMAILS) can't be removed. Only a main admin can add or remove others;
+// every change is logged and emailed to the main admin(s) and to the person affected.
+
+async function adminList(c: Context<AppContext>) {
+  const me = actor(c);
+  return {
+    me,
+    canManage: isSuperAdmin(c, me),
+    max: MAX_EXTRA_ADMINS,
+    mainAdmins: adminEmails(c),
+    admins: (await extraAdmins(c)).map((a) => ({ email: a.email, addedBy: a.added_by, addedAt: a.added_at })),
+  };
+}
+
+adminRoutes.get("/admins", async (c) => c.json(await adminList(c)));
+
+adminRoutes.post("/admins", async (c) => {
+  const me = actor(c);
+  if (!isSuperAdmin(c, me)) fail(403, "Only the main admin can add admins");
+  const body = z.object({ email }).safeParse(await readJson(c, 1024));
+  if (!body.success) fail(400, "Enter a valid email address");
+  const target = body.data.email.trim().toLowerCase();
+  if (adminEmails(c).includes(target)) fail(409, "That is already the main admin");
+  const current = await extraAdmins(c);
+  if (current.some((a) => a.email === target)) fail(409, "That email is already an admin");
+  if (current.length >= MAX_EXTRA_ADMINS) fail(409, `You can have up to ${MAX_EXTRA_ADMINS} extra admins`);
+  await c.env.DB.prepare("INSERT INTO admin_users (email, added_by, added_at) VALUES (?1, ?2, ?3)")
+    .bind(target, me, Date.now())
+    .run();
+  await audit(c.env, me, "admin.add", target);
+  c.executionCtx.waitUntil(
+    sendAdminChangeEmails(c.env, { what: "added", email: target, by: me, mainAdmins: adminEmails(c) }),
+  );
+  return c.json(await adminList(c), 201);
+});
+
+adminRoutes.delete("/admins", async (c) => {
+  const me = actor(c);
+  if (!isSuperAdmin(c, me)) fail(403, "Only the main admin can remove admins");
+  const body = z.object({ email }).safeParse(await readJson(c, 1024));
+  if (!body.success) fail(400, "Enter a valid email address");
+  const target = body.data.email.trim().toLowerCase();
+  if (adminEmails(c).includes(target)) fail(403, "The main admin can't be removed");
+  const gone = await c.env.DB.prepare("DELETE FROM admin_users WHERE email = ?1").bind(target).run();
+  if (!gone.meta.changes) fail(404, "That email isn't an extra admin");
+  // End their sessions and cancel any code already sent to them.
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM admin_sessions WHERE email = ?1").bind(target),
+    c.env.DB.prepare("UPDATE admin_login_codes SET used_at = ?1 WHERE email = ?2 AND used_at IS NULL").bind(
+      Date.now(),
+      target,
+    ),
+  ]);
+  await audit(c.env, me, "admin.remove", target);
+  c.executionCtx.waitUntil(
+    sendAdminChangeEmails(c.env, { what: "removed", email: target, by: me, mainAdmins: adminEmails(c) }),
+  );
+  return c.json(await adminList(c));
 });
 adminRoutes.get("/overview", async (c) => {
   const now = Date.now();

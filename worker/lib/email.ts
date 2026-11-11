@@ -387,6 +387,60 @@ export async function sendMovedEmails(env: AppEnv, bookingId: string, oldStart: 
   });
 }
 
+function adminNoticePage(title: string, body: string) {
+  return `<!doctype html><html><body style="margin:0;background:#fdf9f0;font-family:Arial,sans-serif">
+<div style="max-width:480px;margin:0 auto;padding:32px 20px;color:#1e1a14">
+<p style="margin:0;color:#8f6514;font-size:12px;letter-spacing:3px;font-weight:bold">TAROT BY SATAKSHI · ADMIN</p>
+<h1 style="font-family:Georgia,serif;font-weight:normal">${escapeHtml(title)}</h1>
+<p style="line-height:1.6">${body}</p>
+</div></body></html>`;
+}
+
+/**
+ * Tells every main admin, and the person added or removed, when the admin list changes.
+ * A hijacked session can't quietly add itself a way back in: the main admin is emailed at once.
+ */
+export async function sendAdminChangeEmails(
+  env: AppEnv,
+  change: { what: "added" | "removed"; email: string; by: string; mainAdmins: string[] },
+) {
+  const when = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(Date.now());
+  const verb = change.what === "added" ? "added as an admin" : "removed as an admin";
+  const ref = `${change.what}-${change.email}-${Date.now()}`;
+
+  for (const to of change.mainAdmins) {
+    await sendMail(env, {
+      kind: `admin.list.${change.what}`,
+      to,
+      ref,
+      subject: `Admin list changed: ${change.email} ${change.what}`,
+      html: adminNoticePage(
+        "The admin list changed",
+        `${escapeHtml(change.email)} was ${verb} by ${escapeHtml(change.by)} on ${escapeHtml(when)} IST. If you didn't expect this, open the admin, go to Account and remove them, then choose "Sign out everywhere".`,
+      ),
+    });
+  }
+  // The person added hears about it too; the person removed is told they lost access.
+  if (!change.mainAdmins.includes(change.email)) {
+    await sendMail(env, {
+      kind: `admin.you.${change.what}`,
+      to: change.email,
+      ref,
+      subject: change.what === "added" ? "You can now sign in to the admin" : "Your admin access was removed",
+      html: adminNoticePage(
+        change.what === "added" ? "You are now an admin" : "Admin access removed",
+        change.what === "added"
+          ? "You can sign in at guidancebysatakshi.com/admin with this email address. You'll get a one-time code each time. This email contains no link on purpose: type the address yourself."
+          : "This email address can no longer sign in to the admin of Tarot by Satakshi.",
+      ),
+    });
+  }
+}
+
 /** When the admin cancels a paid booking, the client is told. Money is handled by Refund. */
 export async function sendCancelEmail(env: AppEnv, bookingId: string) {
   const b = await loadBooking(env, bookingId);

@@ -266,18 +266,16 @@ ok(
 );
 await api("/api/admin/login/start", { method: "POST", ip: "10.0.3.2", json: { email: ADMIN } });
 await wait(500);
-const second = await api("/api/admin/login/start", {
+const SECOND = "second.admin@example.com";
+const notYet = await api("/api/admin/login/start", {
   method: "POST",
   ip: "10.0.3.3",
-  json: { email: "sayanbanik66@gmail.com" },
+  json: { email: SECOND },
 });
 await wait(500);
 ok(
-  "second admin gets a code too",
-  second.status === 200 &&
-    (await mail()).some(
-      (e) => e.to[0] === "sayanbanik66@gmail.com" && e.subject === "Your admin sign-in code",
-    ),
+  "an email that isn't an admin gets the same reply and no code",
+  notYet.status === 200 && !(await mail()).some((e) => e.to[0] === SECOND),
 );
 const code = (await mail())
   .filter((e) => e.to[0] === ADMIN)
@@ -285,6 +283,21 @@ const code = (await mail())
   .find((e) => e.subject === "Your admin sign-in code")
   ?.html.match(/>(\d{6})</)?.[1];
 ok("sign-in code emailed to the admin", Boolean(code));
+const codesBefore = (await mail()).filter(
+  (e) => e.to[0] === ADMIN && e.subject === "Your admin sign-in code",
+).length;
+const tooSoon = await api("/api/admin/login/start", {
+  method: "POST",
+  ip: "10.0.3.4",
+  json: { email: ADMIN },
+});
+await wait(700);
+ok(
+  "a second code within 30 seconds is not sent, and the first still works",
+  tooSoon.status === 200 &&
+    (await mail()).filter((e) => e.to[0] === ADMIN && e.subject === "Your admin sign-in code").length ===
+      codesBefore,
+);
 const wrong = await api("/api/admin/login/verify", {
   method: "POST",
   ip: "10.0.3.2",
@@ -299,8 +312,14 @@ const login = await api("/api/admin/login/verify", {
 const cookie = login.setCookie?.split(";")[0];
 ok("right code signs in", login.status === 200 && cookie?.startsWith("__Host-tbs_admin="));
 await wait(800);
-ok("sign-in alert emailed to the admin", (await mail()).some((e) => e.to[0] === ADMIN && e.subject === "New sign-in to the admin"));
-ok("code email has no links", !/href=/i.test((await mail()).find((e) => e.subject === "Your admin sign-in code")?.html ?? "href="));
+ok(
+  "sign-in alert emailed to the admin",
+  (await mail()).some((e) => e.to[0] === ADMIN && e.subject === "New sign-in to the admin"),
+);
+ok(
+  "code email has no links",
+  !/href=/i.test((await mail()).find((e) => e.subject === "Your admin sign-in code")?.html ?? "href="),
+);
 ok(
   "session cookie is HttpOnly, Secure, SameSite=Strict",
   /HttpOnly/i.test(login.setCookie) &&
@@ -318,6 +337,220 @@ ok(
   "admin API refuses a forged session",
   (await api("/api/admin/account", { cookie: "__Host-tbs_admin=forged" })).status === 401,
 );
+// ---- Every admin route refuses a visitor without a session ----
+{
+  const source = readFileSync("worker/routes/admin.ts", "utf8");
+  const open = new Set(["/status", "/login/start", "/login/verify"]); // the only routes that work before sign-in
+  const routes = [...source.matchAll(/adminRoutes\.(get|post|put|patch|delete)\(\s*"([^"]+)"/g)].map((m) => ({
+    method: m[1].toUpperCase(),
+    path: m[2],
+  }));
+  const bad = [];
+  let n = 0;
+  for (const r of routes) {
+    if (open.has(r.path)) continue;
+    n++;
+    const url = `/api/admin${r.path.replace(/:[a-zA-Z]+/g, "x")}`;
+    const res = await api(url, {
+      method: r.method,
+      ip: "10.0.6.1",
+      json: r.method === "GET" ? undefined : {},
+    });
+    if (res.status !== 401) bad.push(`${r.method} ${r.path} -> ${res.status}`);
+    if (n % 50 === 0) await wait(1000);
+  }
+  ok(`all ${n} protected admin routes answer 401 without a session`, bad.length === 0, bad.join("; "));
+  const forged = [];
+  for (const r of routes.filter((x) => !open.has(x.path)).slice(0, 25)) {
+    const res = await api(`/api/admin${r.path.replace(/:[a-zA-Z]+/g, "x")}`, {
+      method: r.method,
+      ip: "10.0.6.2",
+      cookie: "__Host-tbs_admin=" + "a".repeat(43),
+      json: r.method === "GET" ? undefined : {},
+    });
+    if (res.status !== 401) forged.push(`${r.method} ${r.path} -> ${res.status}`);
+  }
+  ok("a made-up session cookie is refused everywhere", forged.length === 0, forged.join("; "));
+}
+// ---- Admin list: only the main admin adds or removes; the main admin can't be removed ----
+{
+  const ipA = "10.0.4.1";
+  const list0 = await api("/api/admin/admins", { cookie, ip: ipA });
+  ok(
+    "main admin sees the list and may manage it",
+    list0.status === 200 && list0.data.canManage === true && list0.data.mainAdmins.includes(ADMIN),
+  );
+  ok("admin list needs a session", (await api("/api/admin/admins", { ip: ipA })).status === 401);
+  ok(
+    "a bad email is refused",
+    (await api("/api/admin/admins", { method: "POST", cookie, ip: ipA, json: { email: "not-an-email" } }))
+      .status === 400,
+  );
+  ok(
+    "the main admin can't be added again",
+    (await api("/api/admin/admins", { method: "POST", cookie, ip: ipA, json: { email: ADMIN } })).status ===
+      409,
+  );
+  ok(
+    "the main admin can't be removed",
+    (await api("/api/admin/admins", { method: "DELETE", cookie, ip: ipA, json: { email: ADMIN } })).status ===
+      403,
+  );
+  ok(
+    "removing someone who isn't an admin gives 404",
+    (
+      await api("/api/admin/admins", {
+        method: "DELETE",
+        cookie,
+        ip: ipA,
+        json: { email: "nobody@example.com" },
+      })
+    ).status === 404,
+  );
+  ok(
+    "add from another site refused",
+    (
+      await api("/api/admin/admins", {
+        method: "POST",
+        cookie,
+        ip: ipA,
+        origin: "https://evil.example",
+        json: { email: SECOND },
+      })
+    ).status === 403,
+  );
+
+  const before = (await mail()).length;
+  const added = await api("/api/admin/admins", {
+    method: "POST",
+    cookie,
+    ip: ipA,
+    json: { email: SECOND.toUpperCase() },
+  });
+  await wait(1500);
+  ok(
+    "main admin adds an admin (email is lowercased)",
+    added.status === 201 && added.data.admins.some((a) => a.email === SECOND),
+    String(added.status),
+  );
+  const msgs = (await mail()).slice(before);
+  ok(
+    "main admin is emailed about the new admin",
+    msgs.some((e) => e.to[0] === ADMIN && e.subject.includes("Admin list changed")),
+  );
+  ok(
+    "the new admin is emailed too, without a link",
+    msgs.some(
+      (e) => e.to[0] === SECOND && e.subject === "You can now sign in to the admin" && !/href=/i.test(e.html),
+    ),
+  );
+  ok(
+    "adding the same email again gives 409",
+    (await api("/api/admin/admins", { method: "POST", cookie, ip: ipA, json: { email: SECOND } })).status ===
+      409,
+  );
+
+  // The new admin signs in with a code, and can look but not change the list.
+  await api("/api/admin/login/start", { method: "POST", ip: "10.0.4.2", json: { email: SECOND } });
+  await wait(700);
+  const code2 = (await mail())
+    .toReversed()
+    .find((e) => e.to[0] === SECOND && e.subject === "Your admin sign-in code")
+    ?.html.match(/>(\d{6})</)?.[1];
+  ok("the new admin gets a sign-in code", Boolean(code2));
+  const login2 = await api("/api/admin/login/verify", {
+    method: "POST",
+    ip: "10.0.4.2",
+    json: { email: SECOND, code: code2 },
+  });
+  const cookie2 = login2.setCookie?.split(";")[0];
+  ok("the new admin signs in", login2.status === 200 && Boolean(cookie2));
+  const list2 = await api("/api/admin/admins", { cookie: cookie2, ip: "10.0.4.2" });
+  ok(
+    "an added admin can see the list but not manage it",
+    list2.status === 200 && list2.data.canManage === false,
+  );
+  ok(
+    "an added admin can't add admins",
+    (
+      await api("/api/admin/admins", {
+        method: "POST",
+        cookie: cookie2,
+        ip: "10.0.4.2",
+        json: { email: "third@example.com" },
+      })
+    ).status === 403,
+  );
+  ok(
+    "an added admin can't remove admins",
+    (
+      await api("/api/admin/admins", {
+        method: "DELETE",
+        cookie: cookie2,
+        ip: "10.0.4.2",
+        json: { email: ADMIN },
+      })
+    ).status === 403,
+  );
+
+  // Removing ends their access at once.
+  const removed = await api("/api/admin/admins", {
+    method: "DELETE",
+    cookie,
+    ip: ipA,
+    json: { email: SECOND },
+  });
+  await wait(1200);
+  ok(
+    "main admin removes the admin",
+    removed.status === 200 && !removed.data.admins.some((a) => a.email === SECOND),
+  );
+  ok(
+    "the removed admin's session stops working",
+    (await api("/api/admin/account", { cookie: cookie2, ip: "10.0.4.2" })).status === 401,
+  );
+  ok(
+    "the removed admin is told",
+    (await mail()).some((e) => e.to[0] === SECOND && e.subject === "Your admin access was removed"),
+  );
+  const beforeCodes = (await mail()).length;
+  await api("/api/admin/login/start", { method: "POST", ip: "10.0.4.3", json: { email: SECOND } });
+  await wait(600);
+  ok(
+    "a removed admin gets no new code",
+    (await mail())
+      .slice(beforeCodes)
+      .every((e) => e.to[0] !== SECOND || e.subject !== "Your admin sign-in code"),
+  );
+
+  // At most 10 extra admins.
+  for (let i = 1; i <= 10; i++)
+    await api("/api/admin/admins", {
+      method: "POST",
+      cookie,
+      ip: "10.0.4.9",
+      json: { email: `extra${i}@example.com` },
+    });
+  const eleventh = await api("/api/admin/admins", {
+    method: "POST",
+    cookie,
+    ip: "10.0.4.9",
+    json: { email: "extra11@example.com" },
+  });
+  ok(
+    "no more than 10 extra admins",
+    eleventh.status === 409 || eleventh.status === 429,
+    String(eleventh.status),
+  );
+  await wait(1100);
+  for (let i = 1; i <= 10; i++)
+    await api("/api/admin/admins", {
+      method: "DELETE",
+      cookie,
+      ip: "10.0.4.8",
+      json: { email: `extra${i}@example.com` },
+    });
+}
 ok(
   "admin changes from another site refused",
   (
