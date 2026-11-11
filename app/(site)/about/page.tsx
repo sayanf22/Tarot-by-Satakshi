@@ -262,6 +262,22 @@ export default function AboutPage() {
         </Container>
       </section>
 
+      {/* Business details, as Razorpay asks the About page to show them. */}
+      <section aria-label="Business details" className="py-12 lg:py-16">
+        <Container className="max-w-3xl">
+          <div className="rounded-[28px] bg-ivory px-6 py-8 text-center ring-1 ring-line sm:px-10">
+            <p className="eyebrow">Business details</p>
+            <p className="mt-4 text-ink">
+              {site.name} is run by {site.owner}, an individual based in {site.address}. It offers online
+              tarot and astrology readings by phone call or text, booked and paid for on this website.
+            </p>
+            <p className="mt-3 text-ink">
+              {site.email} · {site.phone.display} · {site.hours.days}, {site.hours.time} {site.hours.timeZone}
+            </p>
+          </div>
+        </Container>
+      </section>
+
       <BookingCta title="Ask the cards." />
     </>
   );

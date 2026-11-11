@@ -334,6 +334,61 @@ const noPrice = await api("/api/admin/services", {
 });
 ok("a plan without a price is refused", noPrice.status === 400, String(noPrice.status));
 
+// ---- Moving a booking ----
+{
+  const three = await book("Neha Test", 2, "10.0.2.4");
+  ok("booking to move confirmed", three.verify.data.result === "confirmed", three.ref);
+  let target;
+  for (let d = 2; d < 40 && !target; d++) {
+    const date = new Date(Date.now() + d * 864e5 + 5.5 * 36e5).toISOString().slice(0, 10);
+    if (date === three.time.date) continue;
+    const { data } = await api(`/api/admin/bookings/${three.ref}/slots?date=${date}`, { cookie });
+    if (data.slots?.length) target = { date, time: data.slots[0].value };
+  }
+  ok("admin sees free times to move to", Boolean(target));
+  const taken2 = await api(`/api/admin/bookings/${three.ref}/move`, {
+    method: "POST",
+    cookie,
+    json: one.time,
+  });
+  ok("can't move onto a taken time", taken2.status === 409, String(taken2.status));
+  const before2 = (await mail()).length;
+  const moved = await api(`/api/admin/bookings/${three.ref}/move`, { method: "POST", cookie, json: target });
+  await wait(1200);
+  const after2 = await mail();
+  ok("booking moved", moved.status === 200, JSON.stringify(moved.data));
+  ok(
+    "client emailed the new time with a calendar file",
+    after2.some(
+      (e) =>
+        e.to[0] === CLIENT &&
+        e.subject.startsWith("Your session has moved") &&
+        e.attachments.includes("session.ics"),
+    ),
+  );
+  ok(
+    "admin gets a copy of the move",
+    after2.some((e) => e.to[0] === ADMIN && e.subject.startsWith("Moved:")),
+  );
+  ok("exactly two move emails", after2.length - before2 === 2, String(after2.length - before2));
+  const freed = await api("/api/bookings", {
+    method: "POST",
+    ip: "10.0.2.5",
+    json: {
+      service: plan.slug,
+      format: plan.formats[0],
+      ...three.time,
+      agreed: true,
+      details: details("Free Test"),
+    },
+  });
+  ok("the old time is free again after the move", freed.status === 201, String(freed.status));
+  ok(
+    "moving needs a session",
+    (await api(`/api/admin/bookings/${three.ref}/move`, { method: "POST", json: target })).status === 401,
+  );
+}
+
 // ---- Refund and cancel emails ----
 const before = (await mail()).length;
 const refund = await api(`/api/admin/bookings/${one.ref}/refund`, {

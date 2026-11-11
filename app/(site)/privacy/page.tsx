@@ -14,8 +14,8 @@ const sections: LegalSection[] = [
     heading: "Who we are",
     body: (
       <p>
-        {site.owner} runs this website as {site.name} and decides how your personal information is used. You
-        can reach us at {site.email} or {site.phone.display}.
+        {site.owner} runs this website as {site.name}, from {site.address}, and decides how your personal
+        information is used. You can reach us at {site.email} or {site.phone.display}.
       </p>
     ),
   },
@@ -135,6 +135,16 @@ const sections: LegalSection[] = [
           Data Protection Board of India.
         </p>
       </>
+    ),
+  },
+  {
+    heading: "Clients under 18",
+    body: (
+      <p>
+        If the reading is for someone under 18, a parent or guardian must make the booking and agree to these
+        policies for them. By booking, the parent or guardian gives consent for us to use the child’s details,
+        only to provide the reading. We do not track children or show them advertising.
+      </p>
     ),
   },
   {

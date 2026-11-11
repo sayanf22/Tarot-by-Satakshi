@@ -200,7 +200,8 @@ export function StepReview({
                 >
                   refund policy
                 </Link>
-                . Bookings are non-refundable except as the policy describes.
+                . Bookings are non-refundable except as the policy describes. I am 18 or older, or a parent or
+                guardian booking for someone under 18.
               </span>
             </label>
             {!started ? (

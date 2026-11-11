@@ -106,7 +106,14 @@ export type Slot = { value: string; label: string; startAt: number };
  * Uses the weekly hours, any override for that date, the minimum notice, and the
  * blocks held by confirmed bookings or unexpired holds.
  */
-export async function freeSlots(db: D1Database, date: string, durationMin: number, now = Date.now()) {
+export async function freeSlots(
+  db: D1Database,
+  date: string,
+  durationMin: number,
+  now = Date.now(),
+  /** When moving a booking, its own blocks don't count as taken. */
+  ignoreBooking = "",
+) {
   const settings = await bookingSettings(db);
   const today = istToday(now);
   if (date < today || date > addDaysIso(today, settings.windowDays)) return [];
@@ -139,10 +146,10 @@ export async function freeSlots(db: D1Database, date: string, durationMin: numbe
     .prepare(
       `SELECT u.unit_start FROM booking_slot_units u
        JOIN bookings b ON b.id = u.booking_id
-       WHERE u.unit_start >= ?1 AND u.unit_start < ?2
+       WHERE u.unit_start >= ?1 AND u.unit_start < ?2 AND b.id != ?4
          AND (b.status IN ('confirmed', 'completed') OR (b.status = 'held' AND b.hold_expires_at > ?3))`,
     )
-    .bind(dayStart, dayEnd, now)
+    .bind(dayStart, dayEnd, now, ignoreBooking)
     .all<{ unit_start: number }>();
   const taken = new Set(results.map((r) => r.unit_start));
 

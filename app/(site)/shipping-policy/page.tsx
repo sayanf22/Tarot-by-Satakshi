@@ -32,7 +32,10 @@ const sections: LegalSection[] = [
   {
     heading: "When",
     body: (
-      <p>Your reading takes place at the date and time you booked, Monday to Saturday, 11 am to 9 pm IST.</p>
+      <p>
+        Your reading takes place at the date and time you booked, Monday to Saturday, 11 am to 9 pm IST. If
+        you move it (allowed up to {site.rescheduleHours} hours before), it takes place at the new time.
+      </p>
     ),
   },
   {

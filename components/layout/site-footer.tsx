@@ -161,7 +161,11 @@ export function SiteFooter() {
               ))}
             </ul>
           </nav>
-          <div className="mt-8 flex flex-col items-center gap-2 text-center text-sm text-mist sm:flex-row sm:justify-between sm:text-left">
+          <p className="mt-8 text-center text-sm text-mist sm:text-left">
+            {site.name} is run by {site.owner}
+            {site.address ? `, ${site.address}` : ""}.
+          </p>
+          <div className="mt-3 flex flex-col items-center gap-2 text-center text-sm text-mist sm:flex-row sm:justify-between sm:text-left">
             <p>
               © {year} {site.name}. All rights reserved.
             </p>

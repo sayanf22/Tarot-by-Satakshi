@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../env";
 import { adminConfigured, adminEmails, finishLogin, logout, requireAdmin, startLogin } from "../lib/auth";
-import { HOME_CARDS, homeCards, type ServiceRow } from "../lib/data";
-import { sendCancelEmail, sendRefundEmails } from "../lib/email";
+import { freeSlots, HOME_CARDS, homeCards, unitsFor, type ServiceRow } from "../lib/data";
+import { sendCancelEmail, sendMovedEmails, sendRefundEmails } from "../lib/email";
 import { fail, readJson, readText } from "../lib/http";
 import { audit } from "../lib/logs";
 import {
@@ -157,6 +157,64 @@ adminRoutes.get("/bookings/:id", async (c) => {
     .first();
   if (!row) fail(404, "Booking not found");
   return c.json({ booking: row });
+});
+
+// ---- Rescheduling: clients may move a session if they ask at least 12 hours before it. ----
+
+/** Free start times on `date` for this booking's length (its own time counts as free). */
+adminRoutes.get("/bookings/:id/slots", async (c) => {
+  const date = c.req.query("date") ?? "";
+  if (!isIsoDate(date)) fail(400, "Choose a valid date");
+  const b = await c.env.DB.prepare("SELECT id, start_at, end_at FROM bookings WHERE id = ?1")
+    .bind(c.req.param("id"))
+    .first<{ id: string; start_at: number; end_at: number }>();
+  if (!b) fail(404, "Booking not found");
+  const minutes = Math.round((b.end_at - b.start_at) / 60_000);
+  const slots = await freeSlots(c.env.DB, date, minutes, Date.now(), b.id);
+  return c.json({ slots: slots.map(({ value, label }) => ({ value, label })) });
+});
+
+/** Moves a confirmed booking to another free time, and emails the client and the admin. */
+adminRoutes.post("/bookings/:id/move", async (c) => {
+  const body = z
+    .object({ date: z.string().refine(isIsoDate), time: z.string().regex(/^\d{2}:\d{2}$/) })
+    .safeParse(await readJson(c));
+  if (!body.success) fail(400, "Choose a date and time");
+  const id = c.req.param("id");
+  const db = c.env.DB;
+  const b = await db
+    .prepare("SELECT id, status, start_at, end_at FROM bookings WHERE id = ?1")
+    .bind(id)
+    .first<{ id: string; status: string; start_at: number; end_at: number }>();
+  if (!b) fail(404, "Booking not found");
+  if (b.status !== "confirmed") fail(409, "Only a confirmed booking can be moved");
+  const minutes = Math.round((b.end_at - b.start_at) / 60_000);
+  const slot = (await freeSlots(db, body.data.date, minutes, Date.now(), id)).find(
+    (s) => s.value === body.data.time,
+  );
+  if (!slot) fail(409, "That time isn't free. Please choose another.");
+  if (slot.startAt === b.start_at) fail(409, "That's the booking's current time");
+  const now = Date.now();
+  try {
+    // One transaction: release the old blocks, claim the new ones, update the time.
+    // If another booking holds a new block, the primary key fails and nothing changes.
+    await db.batch([
+      db.prepare("DELETE FROM booking_slot_units WHERE booking_id = ?1").bind(id),
+      ...unitsFor(slot.startAt, minutes).map((u) =>
+        db.prepare("INSERT INTO booking_slot_units (unit_start, booking_id) VALUES (?1, ?2)").bind(u, id),
+      ),
+      db
+        .prepare(
+          "UPDATE bookings SET start_at = ?1, end_at = ?2, updated_at = ?3 WHERE id = ?4 AND status = 'confirmed'",
+        )
+        .bind(slot.startAt, slot.startAt + minutes * 60_000, now, id),
+    ]);
+  } catch {
+    fail(409, "That time was just taken. Please choose another.");
+  }
+  await audit(c.env, actor(c), "booking.move", id, `${b.start_at} -> ${slot.startAt}`);
+  c.executionCtx.waitUntil(sendMovedEmails(c.env, id, b.start_at));
+  return c.json({ ok: true });
 });
 
 adminRoutes.patch("/bookings/:id", async (c) => {

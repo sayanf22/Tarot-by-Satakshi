@@ -241,7 +241,7 @@ export async function sendBookingEmails(env: AppEnv, bookingId: string) {
         ["Paid", amount],
         ["Reference", b.id],
       ],
-      `Thank you, ${b.client_name}. Satakshi will reach out to you on ${b.client_phone} for your ${format.toLowerCase()} at the time above. The calendar file attached adds it to your calendar. Questions? Reply to this email.`,
+      `Thank you, ${b.client_name}. Satakshi will reach out to you on ${b.client_phone} for your ${format.toLowerCase()} at the time above. The calendar file attached adds it to your calendar. Need another time? Reply to this email at least 12 hours before your session and it can be moved.`,
       site
         ? [
             { label: "Check your booking", href: `${site}/book/status?ref=${encodeURIComponent(b.id)}` },
@@ -337,6 +337,53 @@ export async function sendRefundEmails(
       ],
       "The client has been emailed.",
     ),
+  });
+}
+
+/** After the admin moves a booking: the client gets the new time (and a new calendar file), the admin a copy. */
+export async function sendMovedEmails(env: AppEnv, bookingId: string, oldStart: number) {
+  const b = await loadBooking(env, bookingId);
+  if (!b) return;
+  const { service, when, format } = bookingFacts(b);
+  const site = siteUrl(env);
+  const was = `${istLabel(oldStart)} IST`;
+  // Each move has its own reference, so moving twice sends two emails.
+  const ref = `${b.id}-${b.start_at}`;
+  await sendMail(env, {
+    kind: "booking.moved",
+    to: b.client_email,
+    ref,
+    replyTo: env.NOTIFY_EMAIL,
+    subject: `Your session has moved: ${service.name}`,
+    html: layout(
+      "Your session has a new time",
+      [
+        ["Reading", service.name],
+        ["Session", format],
+        ["New time", when],
+        ["Was", was],
+        ["Reference", b.id],
+      ],
+      `Hello ${b.client_name}. Your session has been moved to the new time above. The calendar file attached replaces the old one. Questions? Reply to this email.`,
+      site
+        ? [{ label: "Check your booking", href: `${site}/book/status?ref=${encodeURIComponent(b.id)}` }]
+        : [],
+    ),
+    attachments: [{ filename: "session.ics", content: ics(b.id, service.name, b.start_at, b.end_at) }],
+  });
+  await sendMail(env, {
+    kind: "booking.moved.owner",
+    to: env.NOTIFY_EMAIL,
+    ref,
+    replyTo: b.client_email,
+    subject: `Moved: ${service.name}, now ${when}`,
+    html: layout("Booking moved", [
+      ["Reading", service.name],
+      ["New time", when],
+      ["Was", was],
+      ["Name", b.client_name],
+      ["Reference", b.id],
+    ]),
   });
 }
 

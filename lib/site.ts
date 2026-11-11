@@ -16,11 +16,13 @@ export const site = {
     time: "11 am – 9 pm",
     timeZone: "IST",
   },
-  // Still to be confirmed by Satakshi. Each one appears on the Contact page only once it is set,
-  // so no placeholder text reaches the live site. Razorpay needs the address and the grievance
-  // officer's title before it approves the site.
-  address: null as string | null,
-  grievanceDesignation: null as string | null,
+  // Confirmed by Satakshi on WhatsApp (6 November 2026): address as she wrote it, her title,
+  // not GST-registered, run as an individual (no registered business), 12-hour rescheduling,
+  // under-18s may book. Add the tower/flat and PIN code here once she sends them.
+  address: "Panchsheel Greens 2, Noida, Uttar Pradesh, India" as string | null,
+  grievanceDesignation: "Founder" as string | null,
+  /** Hours before a session by which a client must ask to move it. */
+  rescheduleHours: 12,
 } as const;
 
 // Links in the footer's policy row. Every page here is one that Razorpay's website checks

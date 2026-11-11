@@ -20,6 +20,10 @@ export const faq = [
     a: "Online, as the last step of booking. You get a confirmation email once the payment goes through.",
   },
   {
+    q: "Can I change my session time?",
+    a: `Yes, if you ask at least ${site.rescheduleHours} hours before your session. Reply to your confirmation email and it will be moved to another free time.`,
+  },
+  {
     q: "Can I get a refund?",
     a: "Bookings are non-refundable, except in the cases listed in our refund and cancellation policy.",
   },

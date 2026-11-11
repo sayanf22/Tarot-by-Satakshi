@@ -39,6 +39,85 @@ const scopes = [
 
 const serviceName = (s: string) => (JSON.parse(s) as { name: string }).name;
 
+/** Move a confirmed booking to another free time. */
+function MoveBooking({ id, late, onMoved }: { id: string; late: boolean; onMoved: () => Promise<void> }) {
+  const adminApi = useAdminApi();
+  const [date, setDate] = useState("");
+  const [slots, setSlots] = useState<{ value: string; label: string }[] | null>(null);
+  const [time, setTime] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function pickDate(d: string) {
+    setDate(d);
+    setTime("");
+    setSlots(null);
+    setError(null);
+    if (!d) return;
+    const r = await adminApi<{ slots: { value: string; label: string }[] }>(
+      `/bookings/${id}/slots?date=${d}`,
+    );
+    if (r.ok) setSlots(r.data.slots);
+    else setError(r.error);
+  }
+
+  async function move() {
+    if (!date || !time) return;
+    setBusy(true);
+    const r = await adminApi(`/bookings/${id}/move`, { method: "POST", json: { date, time } });
+    setBusy(false);
+    if (r.ok) await onMoved();
+    else setError(r.error);
+  }
+
+  return (
+    <div className="rounded-2xl bg-white p-4 ring-1 ring-line">
+      <p className="text-sm font-semibold text-ink">Move to another time</p>
+      {late ? (
+        <p className="mt-1 text-sm text-ink-muted">
+          The session is less than 12 hours away. The policy only allows moves asked for 12 hours before.
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-muted">Date</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => void pickDate(e.target.value)}
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        {slots ? (
+          slots.length ? (
+            <label className="text-sm">
+              <span className="mb-1 block text-ink-muted">Time (IST)</span>
+              <select
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="rounded-xl border border-line px-3 py-2"
+              >
+                <option value="">Choose…</option>
+                {slots.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p className="text-sm text-ink-muted">No free times that day.</p>
+          )
+        ) : null}
+        <Button size="sm" disabled={busy || !time} onClick={() => void move()}>
+          {busy ? "Moving…" : "Move booking"}
+        </Button>
+      </div>
+      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+    </div>
+  );
+}
+
 function BookingDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
   const adminApi = useAdminApi();
   const [b, setB] = useState<Detail | null>(null);
@@ -98,6 +177,8 @@ function BookingDetail({ id, onChanged }: { id: string; onChanged: () => void })
 
   if (!b) return <p className="text-ink-muted">Loading…</p>;
   const answers = Object.entries(JSON.parse(b.answers_json) as Record<string, string | null>);
+  // Clients may move a session if they ask at least 12 hours before it (refund policy).
+  const hoursLeft = (b.start_at - Date.now()) / 3_600_000;
   const rows: [string, string][] = [
     ["Reading", serviceName(b.service_snapshot)],
     ["Session", b.session_format === "call" ? "Call" : "Text"],
@@ -136,6 +217,17 @@ function BookingDetail({ id, onChanged }: { id: string; onChanged: () => void })
           onChange={(e) => setNote(e.target.value)}
         />
       </div>
+      {b.status === "confirmed" && hoursLeft > 0 ? (
+        <MoveBooking
+          id={b.id}
+          late={hoursLeft < 12}
+          onMoved={async () => {
+            setMsg({ tone: "ok", text: "Moved. The client has been emailed the new time." });
+            await load();
+            onChanged();
+          }}
+        />
+      ) : null}
       {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
       <div className="flex flex-wrap gap-3">
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void act("note")}>

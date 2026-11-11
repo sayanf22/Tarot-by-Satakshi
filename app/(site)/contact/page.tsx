@@ -91,7 +91,7 @@ export default function ContactPage() {
             <p className="eyebrow">Business details</p>
             <dl className="mt-6 space-y-5">
               <Detail label="Business name" value={site.name} />
-              <Detail label="Run by" value={site.owner} />
+              <Detail label="Run by" value={`${site.owner} (individual, not GST-registered)`} />
               {site.address ? <Detail label="Address" value={site.address} /> : null}
             </dl>
           </div>
