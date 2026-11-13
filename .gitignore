@@ -21,6 +21,9 @@ next-env.d.ts
 .env
 .env.*
 !.env.example
+# Razorpay key downloads from the dashboard
+rzp-key*.csv
+*.csv
 
 # Tests and review screenshots
 .screenshots/
