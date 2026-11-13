@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
@@ -148,6 +148,46 @@ export function AdminCategories({
   const orderChanged = order !== null;
   const waitForOrder = orderChanged ? "Save or cancel the new order first." : undefined;
 
+  // Slide animation when the order changes: each row starts where it was and glides to its
+  // new place (measure, then animate the difference). Skipped when the visitor asks for less motion.
+  const rows = useRef(new Map<string, HTMLLIElement>());
+  const tops = useRef(new Map<string, number>());
+  const lastOrder = useRef("");
+  const refocus = useRef<{ slug: string; by: -1 | 1 } | null>(null);
+  const orderKey = list.map((c) => c.slug).join(",");
+  useLayoutEffect(() => {
+    const changed = lastOrder.current !== "" && lastOrder.current !== orderKey;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const next = new Map<string, number>();
+    rows.current.forEach((el, slug) => {
+      const top = el.offsetTop;
+      next.set(slug, top);
+      const before = tops.current.get(slug);
+      if (changed && !still && before !== undefined && before !== top) {
+        el.animate([{ transform: `translateY(${before - top}px)` }, { transform: "translateY(0)" }], {
+          duration: 380,
+          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+        });
+      }
+    });
+    tops.current = next;
+    lastOrder.current = orderKey;
+    // Keep focus on the arrow that was pressed (or the other one, once the row reaches an end).
+    const f = refocus.current;
+    if (changed && f) {
+      refocus.current = null;
+      const name = list.find((c) => c.slug === f.slug)?.name ?? "";
+      const row = rows.current.get(f.slug);
+      const same = row?.querySelector<HTMLButtonElement>(
+        `button[aria-label="Move ${CSS.escape(name)} ${f.by < 0 ? "up" : "down"}"]`,
+      );
+      const other = row?.querySelector<HTMLButtonElement>(
+        `button[aria-label="Move ${CSS.escape(name)} ${f.by < 0 ? "down" : "up"}"]`,
+      );
+      (same && !same.disabled ? same : other)?.focus({ preventScroll: true });
+    }
+  });
+
   // One place for every change: send, show the answer, reload the list.
   async function change(
     run: () => Promise<{ ok: true; data?: unknown } | { ok: false; error: string }>,
@@ -227,6 +267,7 @@ export function AdminCategories({
     const slugs = list.map((c) => c.slug);
     [slugs[index], slugs[next]] = [slugs[next]!, slugs[index]!];
     const same = slugs.every((s, i) => s === categories[i]?.slug);
+    refocus.current = { slug: list[index]!.slug, by };
     setOrder(same ? null : slugs);
     setMsg(null);
   }
@@ -302,7 +343,14 @@ export function AdminCategories({
       ) : (
         <ul className="divide-y divide-line">
           {list.map((c, i) => (
-            <li key={c.slug} className="py-4">
+            <li
+              key={c.slug}
+              ref={(el) => {
+                if (el) rows.current.set(c.slug, el);
+                else rows.current.delete(c.slug);
+              }}
+              className="relative bg-white py-4"
+            >
               {editing?.slug === c.slug ? (
                 <form onSubmit={saveEdit} className="space-y-5">
                   <CategoryFields
