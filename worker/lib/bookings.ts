@@ -14,6 +14,7 @@ import { MINUTE } from "./time";
 
 // Booking life cycle, shared by the checkout callback, the webhook and the cron.
 // Every step is idempotent: running it twice for the same payment changes nothing.
+// A booking awaiting payment locks no time. The time is locked only when a payment is captured.
 
 type BookingRow = {
   id: string;
@@ -51,16 +52,59 @@ async function refundInFull(env: AppEnv, p: RzpPayment, note: string) {
   return refundPayment(env, p.id, p.amount, note, `refund_${p.id}`);
 }
 
+/** True when this very payment already confirmed the booking. A duplicate call, so no refund. */
+async function confirmedByPayment(env: AppEnv, bookingId: string, orderId: string, paymentId: string) {
+  const status = await bookingStatus(env, bookingId);
+  const row = await env.DB.prepare("SELECT gateway_payment_id FROM payments WHERE gateway_order_id = ?1")
+    .bind(orderId)
+    .first<{ gateway_payment_id: string | null }>();
+  return ["confirmed", "completed"].includes(status ?? "") && row?.gateway_payment_id === paymentId;
+}
+
+/**
+ * The time went to another client, or the booking was cancelled meanwhile: refunds this captured
+ * payment in full. The guarded UPDATE is the lock. Only the caller that changes the row refunds,
+ * so two racing calls can't both refund. The lock also stores the payment id, so the cron can retry.
+ */
+async function refundTaken(
+  env: AppEnv,
+  ctx: WaitCtx,
+  p: RzpPayment,
+  payment: PaymentRow,
+  booking: BookingRow,
+  now: number,
+  actor: string,
+): Promise<SettleResult> {
+  const lock = await env.DB.prepare(
+    `UPDATE payments SET status = 'refund_pending', gateway_payment_id = ?1, updated_at = ?2
+     WHERE gateway_order_id = ?3 AND (status IN ('created', 'failed') OR (status = 'paid' AND gateway_payment_id = ?1))`,
+  )
+    .bind(p.id, now, payment.gateway_order_id)
+    .run();
+  // Someone else is already refunding it.
+  if (!lock.meta.changes) return "refunded";
+  try {
+    const refund = await refundInFull(env, p, "Time slot no longer available");
+    await db_markRefunded(env, payment.gateway_order_id, booking.id, p.id, refund, now);
+    if (refund) ctx.waitUntil(sendRefundEmails(env, booking.id, refund.amount, "slot_taken"));
+  } catch (err) {
+    // Left as refund_pending: the admin sees it, and the cron retries it (same idempotency key).
+    console.error("auto refund failed", err instanceof Error ? err.message : "");
+  }
+  await audit(env, actor, "booking.slot_taken_refunded", booking.id, `payment ${p.id}`);
+  return "refunded";
+}
+
 /**
  * Turns a verified Razorpay payment into a confirmed booking. Called by the checkout callback,
  * the webhook and the cron, in any order and any number of times, possibly at the same moment.
  * - The payment must match our order id, amount and currency.
- * - A second payment for a booking that is already paid (Razorpay allows only one per order, but
- *   a late-authorised attempt can still arrive) is never captured, and is refunded if captured.
+ * - A second payment for a booking that is already paid is never captured, and is refunded if captured.
  * - A payment that arrives after the session time has passed is never captured; if Razorpay
  *   already captured it, it is refunded in full.
- * - If the hold lapsed but the time is still free, the time is claimed again.
- * - If someone else booked the time meanwhile, the money is refunded in full automatically.
+ * - The money is captured first, then the time is claimed in one transaction. The first captured
+ *   payment for a time wins. If another client holds the time, or the booking was cancelled, the
+ *   payment is refunded in full.
  */
 export async function settlePayment(
   env: AppEnv,
@@ -117,86 +161,52 @@ export async function settlePayment(
     return "refunded";
   }
 
+  // 3. Money first. An authorised payment is captured before the time is claimed. If a racing
+  // call (checkout callback or webhook) captured it a moment earlier, the capture call fails,
+  // and the payment is read again instead.
   let paid = p;
-  if (paid.status === "authorized") paid = await capturePayment(env, p.id, payment.amount_paise);
+  if (paid.status === "authorized")
+    paid = await capturePayment(env, p.id, payment.amount_paise).catch(() => fetchPayment(env, p.id));
   if (paid.status !== "captured") return "ignored";
 
+  // 4. Claim the time in one transaction (a D1 batch commits all of it or none of it).
   const db = env.DB;
-  // The same blocks the booking claimed when it was made (see unitsFor).
+  // The same blocks the booking would claim (see unitsFor).
   const blocks = unitsFor(booking.start_at, Math.round((booking.end_at - booking.start_at) / MINUTE));
-  const expected = blocks.length;
+  // The claim writes only while the booking is still open for this payment. Otherwise no unit is
+  // written, so a booking that is no longer held never blocks anyone.
+  const claimable = `EXISTS (SELECT 1 FROM bookings WHERE id = ?2 AND status IN ('held', 'expired'))
+    AND EXISTS (SELECT 1 FROM payments WHERE gateway_order_id = ?3 AND status IN ('created', 'failed'))`;
+  const units = blocks.map((u) =>
+    db
+      .prepare(`INSERT INTO booking_slot_units (unit_start, booking_id) SELECT ?1, ?2 WHERE ${claimable}`)
+      .bind(u, booking.id, payment.gateway_order_id),
+  );
+  const confirm = db
+    .prepare(
+      `UPDATE bookings SET status = 'confirmed', hold_expires_at = NULL, confirmed_at = ?1, updated_at = ?1
+       WHERE id = ?2 AND ${claimable}`,
+    )
+    .bind(now, booking.id, payment.gateway_order_id);
   const markPaid = db
     .prepare(
       `UPDATE payments SET status = 'paid', gateway_payment_id = ?1, method = ?2, updated_at = ?3
        WHERE gateway_order_id = ?4 AND status IN ('created', 'failed')`,
     )
     .bind(paid.id, paid.method ?? null, now, payment.gateway_order_id);
-  const confirm = db
-    .prepare(
-      `UPDATE bookings SET status = 'confirmed', hold_expires_at = NULL, confirmed_at = ?1, updated_at = ?1
-       WHERE id = ?2 AND status IN ('held', 'expired')
-         AND (SELECT count(*) FROM booking_slot_units WHERE booking_id = ?2) = ?3`,
-    )
-    .bind(now, booking.id, expected);
+  // Null when the batch rolled back: another booking holds one of these blocks, so the primary key refused it.
+  const results = await db.batch([...units, confirm, markPaid]).catch(() => null);
+  const claimed = results?.[units.length]?.meta.changes ?? 0;
 
-  // 3. The hold still owns its time blocks: confirm. Only one caller can change the row.
-  const [, confirmed] = await db.batch([markPaid, confirm]);
-  let ok = (confirmed?.meta.changes ?? 0) > 0;
-  // Another caller (webhook, checkout callback or cron) confirmed it a moment ago.
-  if (!ok && ["confirmed", "completed"].includes((await bookingStatus(env, booking.id)) ?? ""))
-    return "already";
-
-  // 4. The hold lapsed and its blocks were released: claim them again if free.
-  if (!ok) {
-    try {
-      const results = await db.batch([
-        db
-          .prepare(
-            `DELETE FROM booking_slot_units WHERE unit_start IN (SELECT value FROM json_each(?1))
-             AND booking_id IN (SELECT id FROM bookings WHERE status IN ('held', 'expired') AND hold_expires_at <= ?2 AND id != ?3)`,
-          )
-          .bind(JSON.stringify(blocks), now, booking.id),
-        db.prepare("DELETE FROM booking_slot_units WHERE booking_id = ?1").bind(booking.id),
-        ...blocks.map((u) =>
-          db
-            .prepare("INSERT INTO booking_slot_units (unit_start, booking_id) VALUES (?1, ?2)")
-            .bind(u, booking.id),
-        ),
-        confirm,
-      ]);
-      ok = (results.at(-1)?.meta.changes ?? 0) > 0;
-    } catch {
-      ok = false;
-    }
-    if (!ok && ["confirmed", "completed"].includes((await bookingStatus(env, booking.id)) ?? ""))
-      return "already";
-  }
-
-  if (ok) {
+  if (claimed > 0) {
     await audit(env, actor, "booking.confirmed", booking.id, `payment ${paid.id}`);
     ctx.waitUntil(sendBookingEmails(env, booking.id));
     return "confirmed";
   }
-
-  // 5. The time was taken by another client: refund in full.
-  const lock = await db
-    .prepare(
-      "UPDATE payments SET status = 'refund_pending', updated_at = ?1 WHERE gateway_order_id = ?2 AND status IN ('created', 'failed', 'paid')",
-    )
-    .bind(now, payment.gateway_order_id)
-    .run();
-  // Someone else is already refunding it.
-  if (!lock.meta.changes) return "refunded";
-  try {
-    const refund = await refundInFull(env, paid, "Time slot no longer available");
-    await db_markRefunded(env, payment.gateway_order_id, booking.id, paid.id, refund, now);
-    if (refund) ctx.waitUntil(sendRefundEmails(env, booking.id, refund.amount, "slot_taken"));
-  } catch (err) {
-    // Left as refund_pending: the admin sees it, and the cron retries it (same idempotency key).
-    console.error("auto refund failed", err instanceof Error ? err.message : "");
-  }
-  await audit(env, actor, "booking.slot_taken_refunded", booking.id, `payment ${paid.id}`);
-  return "refunded";
+  // Not claimed. Either a racing call for this same payment already confirmed it (no refund),
+  // or the time went to another client or the booking was cancelled (refund in full).
+  if (await confirmedByPayment(env, booking.id, payment.gateway_order_id, paid.id)) return "already";
+  return refundTaken(env, ctx, paid, payment, booking, now, actor);
 }
 
 /** Records a full refund on the payment and the booking. */

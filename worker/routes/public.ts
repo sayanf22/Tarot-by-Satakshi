@@ -16,7 +16,6 @@ import {
   publicService,
   windowDays,
   serviceBySlug,
-  unitsFor,
 } from "../lib/data";
 import { layout, sendMail } from "../lib/email";
 import { fail, readJson, readText, requireSameOrigin } from "../lib/http";
@@ -126,7 +125,6 @@ const bookingInput = z.object({
   time: z.string().regex(/^\d{2}:\d{2}$/),
   agreed: z.literal(true),
   details: z.unknown(),
-  turnstileToken: z.string().max(2048).optional(),
 });
 
 /**
@@ -141,7 +139,6 @@ publicRoutes.post("/bookings", async (c) => {
   const input = bookingInput.safeParse(await readJson(c));
   if (!input.success) fail(400, "Please check your booking and try again");
   const b = input.data;
-  await verifyTurnstile(c, b.turnstileToken, "booking");
 
   const service = await serviceBySlug(c.env.DB, b.service);
   if (!service) fail(404, "Reading not found");
@@ -160,7 +157,6 @@ publicRoutes.post("/bookings", async (c) => {
   const now = Date.now();
   const id = bookingRef();
   const holdUntil = now + settings.holdMinutes * MINUTE;
-  const units = unitsFor(slot.startAt, duration);
   const answers =
     service.category === "astrology"
       ? {
@@ -180,46 +176,31 @@ publicRoutes.post("/bookings", async (c) => {
   });
 
   const db = c.env.DB;
-  try {
-    // One transaction: free blocks left by lapsed holds, add the booking, claim its
-    // blocks. If another client got a block first, the primary key fails and nothing is written.
-    await db.batch([
-      db
-        .prepare(
-          `DELETE FROM booking_slot_units WHERE unit_start IN (SELECT value FROM json_each(?1))
-           AND booking_id IN (SELECT id FROM bookings WHERE status IN ('held', 'expired') AND hold_expires_at <= ?2)`,
-        )
-        .bind(JSON.stringify(units), now),
-      db
-        .prepare(
-          `INSERT INTO bookings (id, service_id, service_snapshot, session_format, start_at, end_at, status, hold_expires_at,
-             client_name, client_email, client_phone, topic, question, answers_json, amount_paise, created_at, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'held', ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?15)`,
-        )
-        .bind(
-          id,
-          service.id,
-          snapshot,
-          b.format,
-          slot.startAt,
-          slot.startAt + duration * MINUTE,
-          holdUntil,
-          d.name,
-          d.email,
-          d.phone,
-          d.topic,
-          d.question,
-          JSON.stringify(answers),
-          amount,
-          now,
-        ),
-      ...units.map((u) =>
-        db.prepare("INSERT INTO booking_slot_units (unit_start, booking_id) VALUES (?1, ?2)").bind(u, id),
-      ),
-    ]);
-  } catch {
-    fail(409, "That time was just taken. Please choose another.");
-  }
+  // A hold only. No time is locked until its payment is captured (see settlePayment).
+  await db
+    .prepare(
+      `INSERT INTO bookings (id, service_id, service_snapshot, session_format, start_at, end_at, status, hold_expires_at,
+         client_name, client_email, client_phone, topic, question, answers_json, amount_paise, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'held', ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?15)`,
+    )
+    .bind(
+      id,
+      service.id,
+      snapshot,
+      b.format,
+      slot.startAt,
+      slot.startAt + duration * MINUTE,
+      holdUntil,
+      d.name,
+      d.email,
+      d.phone,
+      d.topic,
+      d.question,
+      JSON.stringify(answers),
+      amount,
+      now,
+    )
+    .run();
 
   let orderId: string;
   try {

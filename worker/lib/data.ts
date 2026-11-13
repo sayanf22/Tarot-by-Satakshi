@@ -150,10 +150,10 @@ async function loadAvailability(
       .prepare(
         `SELECT u.unit_start FROM booking_slot_units u
          JOIN bookings b ON b.id = u.booking_id
-         WHERE u.unit_start >= ?1 AND u.unit_start < ?2 AND b.id != ?4
-           AND (b.status IN ('confirmed', 'completed') OR (b.status = 'held' AND b.hold_expires_at > ?3))`,
+         WHERE u.unit_start >= ?1 AND u.unit_start < ?2 AND b.id != ?3
+           AND b.status IN ('confirmed', 'completed')`,
       )
-      .bind(istToUtc(from, 0), istToUtc(addDaysIso(to, 1), 0), now, ignoreBooking)
+      .bind(istToUtc(from, 0), istToUtc(addDaysIso(to, 1), 0), ignoreBooking)
       .all<{ unit_start: number }>()
       .then((r) => new Set(r.results.map((x) => x.unit_start))),
   ]);
@@ -212,7 +212,7 @@ export async function daySlots(
 /**
  * Free start times on one IST date for a session of `durationMin`.
  * Uses the weekly hours, any override for that date, the minimum notice, and the
- * blocks held by confirmed bookings or unexpired holds.
+ * blocks of confirmed bookings. A booking still awaiting payment doesn't block its time.
  */
 export async function freeSlots(
   db: D1Database,

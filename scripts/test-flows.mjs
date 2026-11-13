@@ -58,6 +58,38 @@ async function api(path, { method = "GET", json, cookie, origin = B, ip } = {}) 
 const mail = async () => (await fetch(`${MOCK_MAIL}/all`)).json();
 const sign = (o, p) => createHmac("sha256", vars.RAZORPAY_KEY_SECRET).update(`${o}|${p}`).digest("hex");
 
+// Payment helpers, used by the booking race checks and the payment edge cases.
+const pay = async (orderId, extra = {}) =>
+  (
+    await fetch(`${MOCK_PAY}/test/pay`, { method: "POST", body: JSON.stringify({ orderId, ...extra }) })
+  ).json();
+const refunds = async (payId) => (await (await fetch(`${MOCK_PAY}/test/refunds/${payId}`)).json()).count;
+const payState = async (payId) => (await (await fetch(`${MOCK_PAY}/v1/payments/${payId}`)).json()).status;
+const hook = (event, p) => {
+  const raw = JSON.stringify({ event, payload: { payment: { entity: p } } });
+  return fetch(`${B}/api/payments/webhook`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Razorpay-Signature": createHmac("sha256", vars.RAZORPAY_WEBHOOK_SECRET).update(raw).digest("hex"),
+      "X-Razorpay-Event-Id": `evt_${Math.random().toString(36).slice(2)}`,
+    },
+    body: raw,
+  }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null) }));
+};
+const verify = (ref, p, ip) =>
+  api("/api/payments/verify", {
+    method: "POST",
+    ip,
+    json: {
+      reference: ref,
+      razorpay_payment_id: p.id,
+      razorpay_order_id: p.order_id,
+      razorpay_signature: sign(p.order_id, p.id),
+    },
+  });
+const statusOf = async (ref, ip = "10.0.8.9") => (await api(`/api/bookings/${ref}`, { ip })).data.status;
+
 await fetch(`${MOCK_MAIL}/clear`, { method: "POST" });
 
 // ---- Health and public reads ----
@@ -187,7 +219,7 @@ async function book(name, skip, ip) {
     ok(`booking held (${name})`, false, `${r.status} ${JSON.stringify(r.data)}`);
     process.exit(1);
   }
-  const pay = await (
+  const paid = await (
     await fetch(`${MOCK_PAY}/test/pay`, {
       method: "POST",
       body: JSON.stringify({ orderId: r.data.checkout.orderId }),
@@ -198,12 +230,12 @@ async function book(name, skip, ip) {
     ip,
     json: {
       reference: r.data.reference,
-      razorpay_payment_id: pay.id,
-      razorpay_order_id: pay.order_id,
-      razorpay_signature: sign(pay.order_id, pay.id),
+      razorpay_payment_id: paid.id,
+      razorpay_order_id: paid.order_id,
+      razorpay_signature: sign(paid.order_id, paid.id),
     },
   });
-  return { ref: r.data.reference, pay, verify: v, held: r.data, time: t };
+  return { ref: r.data.reference, pay: paid, verify: v, held: r.data, time: t };
 }
 
 const one = await book("Asha Test", 0, "10.0.2.1");
@@ -276,7 +308,8 @@ ok("a booked time can't be booked twice", taken.status === 409, JSON.stringify(t
     JSON.stringify(days.data.days?.slice(0, 3)),
   );
 
-  // Race: several clients press Pay for the same free time at the same moment.
+  // Race: four clients hold the same free time at the same moment. A hold locks nothing, so all
+  // four are accepted. Then they all pay at the same moment, and the first payment captured wins.
   const t = await freeTime(0);
   const racers = await Promise.all(
     [1, 2, 3, 4].map((i) =>
@@ -293,20 +326,62 @@ ok("a booked time can't be booked twice", taken.status === 409, JSON.stringify(t
       }),
     ),
   );
-  const won = racers.filter((r) => r.status === 201).length;
-  const lost = racers.filter((r) => r.status === 409).length;
   ok(
-    "same time, same moment: exactly one client gets it, the rest are told it's taken",
-    won === 1 && lost === 3,
+    "a booking is accepted with no Turnstile token",
+    racers[0].status === 201 && Boolean(racers[0].data.reference),
+    String(racers[0].status),
+  );
+  ok(
+    "four holds on the same time are all accepted, because nothing is locked until paid",
+    racers.every((r) => r.status === 201),
     racers.map((r) => r.status).join(","),
+  );
+  const greyBefore = await api(`/api/slots?service=${plan.slug}&date=${t.date}`, { ip: "10.0.1.3" });
+  ok(
+    "an unpaid held booking doesn't make the time booked",
+    greyBefore.data.slots?.find((s) => s.value === t.time)?.status === "free",
+  );
+  // Each racer pays, then its callback and webhook arrive together. Racers 2 and 4 pay with
+  // authorised payments, which are captured on the way to confirmation.
+  const raced = await Promise.all(
+    racers.map(async (r, i) => {
+      const kind = i % 2 ? "authorized" : "captured";
+      const p = await pay(r.data.checkout.orderId, { status: kind });
+      const [v, h] = await Promise.all([
+        verify(r.data.reference, p, `10.0.9.${i + 1}`),
+        hook(kind === "authorized" ? "payment.authorized" : "payment.captured", p),
+      ]);
+      return { p, v, h, ref: r.data.reference };
+    }),
+  );
+  const outcomes = await Promise.all(raced.map((x) => statusOf(x.ref)));
+  const refundCounts = await Promise.all(raced.map((x) => refunds(x.p.id)));
+  const states = await Promise.all(raced.map((x) => payState(x.p.id)));
+  ok(
+    "four payments at the same moment: one booking confirmed, the other three refunded automatically",
+    outcomes.filter((s) => s === "confirmed").length === 1 &&
+      outcomes.filter((s) => s === "refunded").length === 3 &&
+      raced.every((x) => x.v.status === 200 && x.h.status === 200),
+    outcomes.join(","),
+  );
+  ok(
+    "the winning payment is kept; each losing payment is refunded in full, exactly once",
+    raced.every((x, i) =>
+      outcomes[i] === "confirmed"
+        ? refundCounts[i] === 0 && states[i] === "captured"
+        : refundCounts[i] === 1 && states[i] === "refunded",
+    ),
+    `refunds=${refundCounts.join(",")} payments=${states.join(",")}`,
   );
   const after = await api(`/api/slots?service=${plan.slug}&date=${t.date}`, { ip: "10.0.1.3" });
   ok(
-    "a time being paid for is grey for everyone else",
+    "once paid, the time is grey for everyone else",
     after.data.slots?.find((s) => s.value === t.time)?.status === "booked",
   );
 }
 
+await wait(1200); // let the race's confirmation and refund emails land first
+const beforeReplay = (await mail()).length;
 const again = await api("/api/payments/verify", {
   method: "POST",
   ip: "10.0.2.1",
@@ -319,7 +394,7 @@ const again = await api("/api/payments/verify", {
 });
 await wait(800);
 ok("replayed payment is not confirmed twice", again.data.result === "already", again.data.result);
-ok("no duplicate emails", (await mail()).length === all.length);
+ok("no duplicate emails", (await mail()).length === beforeReplay);
 const forged = await api("/api/payments/verify", {
   method: "POST",
   ip: "10.0.2.1",
@@ -345,34 +420,6 @@ ok("webhook without a valid signature refused", webhook.status === 400);
       stdio: "ignore",
       env: { ...process.env, CI: "1", WRANGLER_SEND_METRICS: "false" },
     });
-  const pay = async (orderId, extra = {}) =>
-    (
-      await fetch(`${MOCK_PAY}/test/pay`, { method: "POST", body: JSON.stringify({ orderId, ...extra }) })
-    ).json();
-  const refunds = async (payId) => (await (await fetch(`${MOCK_PAY}/test/refunds/${payId}`)).json()).count;
-  const hook = (event, p) => {
-    const raw = JSON.stringify({ event, payload: { payment: { entity: p } } });
-    return fetch(`${B}/api/payments/webhook`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Razorpay-Signature": createHmac("sha256", vars.RAZORPAY_WEBHOOK_SECRET).update(raw).digest("hex"),
-        "X-Razorpay-Event-Id": `evt_${Math.random().toString(36).slice(2)}`,
-      },
-      body: raw,
-    }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null) }));
-  };
-  const verify = (ref, p, ip) =>
-    api("/api/payments/verify", {
-      method: "POST",
-      ip,
-      json: {
-        reference: ref,
-        razorpay_payment_id: p.id,
-        razorpay_order_id: p.order_id,
-        razorpay_signature: sign(p.order_id, p.id),
-      },
-    });
   const hold = async (name, skip, ip) => {
     const t = await freeTime(skip);
     const r = await api("/api/bookings", {
@@ -382,8 +429,6 @@ ok("webhook without a valid signature refused", webhook.status === 400);
     });
     return { ref: r.data.reference, orderId: r.data.checkout?.orderId, time: t, status: r.status };
   };
-  const statusOf = async (ref) => (await api(`/api/bookings/${ref}`, { ip: "10.0.8.9" })).data.status;
-
   // A. The checkout callback and two webhooks arrive at the same moment for one payment.
   const a = await hold("Race Test", 0, "10.0.8.1");
   const pa = await pay(a.orderId);
@@ -402,6 +447,10 @@ ok("webhook without a valid signature refused", webhook.status === 400);
     "callback and webhooks racing: booking confirmed once, one confirmation email",
     (await statusOf(a.ref)) === "confirmed" && raced.every((r) => r.status === 200) && confirmations === 1,
     `${raced.map((r) => r.data?.result ?? r.status).join(",")} emails=${confirmations}`,
+  );
+  ok(
+    "the same captured payment, sent twice by webhook and once by callback at the same moment: refunded 0 times",
+    (await refunds(pa.id)) === 0,
   );
 
   // B. Payment only authorised (late authorisation or manual capture): the webhook captures it.
@@ -452,10 +501,10 @@ ok("webhook without a valid signature refused", webhook.status === 400);
     `refunds=${await refunds(pe.id)} status=${await statusOf(e.ref)}`,
   );
 
-  // F. The hold lapsed and another client took the time; the first payment then lands.
+  // F. The hold lapsed. Another client pays and is confirmed first. Then the first client pays.
   const f1 = await hold("Slow Payer", 3, "10.0.8.4");
   sql(
-    `DELETE FROM booking_slot_units WHERE booking_id = '${f1.ref}'; UPDATE bookings SET status = 'expired', hold_expires_at = ${Date.now() - 600_000} WHERE id = '${f1.ref}'`,
+    `UPDATE bookings SET status = 'expired', hold_expires_at = ${Date.now() - 600_000} WHERE id = '${f1.ref}'`,
   );
   const f2 = await api("/api/bookings", {
     method: "POST",
@@ -469,15 +518,53 @@ ok("webhook without a valid signature refused", webhook.status === 400);
     },
   });
   ok("after the hold lapses, another client can take the time", f2.status === 201, String(f2.status));
+  const fastPay = await pay(f2.data.checkout.orderId);
+  const fastVerify = await verify(f2.data.reference, fastPay, "10.0.8.5");
   const pf = await pay(f1.orderId);
   await Promise.all([hook("payment.captured", pf), hook("order.paid", pf), verify(f1.ref, pf, "10.0.8.4")]);
   await wait(1200);
   ok(
     "the late payer is refunded exactly once; the other booking keeps the time",
-    (await refunds(pf.id)) === 1 &&
+    fastVerify.data.result === "confirmed" &&
+      (await refunds(pf.id)) === 1 &&
       (await statusOf(f1.ref)) === "refunded" &&
-      (await statusOf(f2.data.reference)) === "held",
+      (await statusOf(f2.data.reference)) === "confirmed",
     `refunds=${await refunds(pf.id)} ${await statusOf(f1.ref)} / ${await statusOf(f2.data.reference)}`,
+  );
+
+  // F2. A hold that hasn't expired doesn't stop another client from paying first.
+  const h1 = await hold("Holder", 4, "10.0.8.7");
+  const h2 = await api("/api/bookings", {
+    method: "POST",
+    ip: "10.0.8.8",
+    json: {
+      service: plan.slug,
+      format: plan.formats[0],
+      ...h1.time,
+      agreed: true,
+      details: details("Quick Payer"),
+    },
+  });
+  ok(
+    "a time that is only held can still be booked by another client, and the hold locks nothing",
+    h2.status === 201 && (await statusOf(h1.ref)) === "held",
+    String(h2.status),
+  );
+  const quickPay = await pay(h2.data.checkout.orderId);
+  const quickVerify = await verify(h2.data.reference, quickPay, "10.0.8.8");
+  const ph1 = await pay(h1.orderId);
+  const holderVerify = await verify(h1.ref, ph1, "10.0.8.7");
+  await hook("payment.captured", ph1);
+  await wait(1200);
+  ok(
+    "the holder pays after the second client is confirmed: refunded exactly once, the second keeps the time",
+    quickVerify.data.result === "confirmed" &&
+      holderVerify.data.result === "refunded" &&
+      (await refunds(ph1.id)) === 1 &&
+      (await refunds(quickPay.id)) === 0 &&
+      (await statusOf(h1.ref)) === "refunded" &&
+      (await statusOf(h2.data.reference)) === "confirmed",
+    `${holderVerify.data.result} refunds=${await refunds(ph1.id)}`,
   );
 
   // G. A signed event for an order that isn't ours (another app on the same account) is ignored.
