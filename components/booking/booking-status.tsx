@@ -32,7 +32,7 @@ const states = {
   expired: {
     icon: Clock,
     title: "Your time slot was released",
-    text: "The hold ran out before payment finished. Please choose a time again.",
+    text: "The hold ran out before payment finished. If money already left your account, don't pay again: the booking is confirmed automatically if the time is still free, or the full amount comes back to you, and you'll get an email either way. Otherwise, please choose a time again.",
     action: { href: "/book", label: "Choose a time" },
   },
   refunded: {
@@ -52,8 +52,12 @@ const states = {
 type State = keyof typeof states;
 type Status = { status: string; service: string; startAt: number; format: string };
 
-const POLL_MS = 3000;
-const POLL_LIMIT = 40; // about two minutes
+// Every 3 s for the first minute, then every 10 s up to about 10 minutes: some UPI and bank
+// payments take a few minutes to reach Razorpay. After that the page says so and offers a button.
+const POLL_FAST_MS = 3000;
+const POLL_SLOW_MS = 10_000;
+const FAST_TRIES = 20;
+const POLL_LIMIT = 74;
 
 function toState(s: string): State {
   if (s === "confirmed") return "confirmed";
@@ -70,6 +74,9 @@ export function BookingStatus() {
   const ref = /^TS-[A-Z0-9]{8}$/i.test(raw) ? raw.toUpperCase() : null;
   const [state, setState] = useState<State>(ref ? "processing" : "unknown");
   const [info, setInfo] = useState<Status | null>(null);
+  // Stopped checking while still "processing"; `round` starts another round of checks.
+  const [gaveUp, setGaveUp] = useState(false);
+  const [round, setRound] = useState(0);
 
   useEffect(() => {
     if (!ref) return;
@@ -88,14 +95,16 @@ export function BookingStatus() {
         setState("unknown");
         return;
       }
-      if (++tries < POLL_LIMIT) timer = setTimeout(check, POLL_MS);
+      if (++tries < POLL_LIMIT) timer = setTimeout(check, tries < FAST_TRIES ? POLL_FAST_MS : POLL_SLOW_MS);
+      else setGaveUp(true);
     }
     void check();
     return () => {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [ref]);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- `round` restarts the checks
+  }, [ref, round]);
 
   const { icon: Icon, title, text, action } = states[state];
   const when =
@@ -127,6 +136,25 @@ export function BookingStatus() {
         <p className="mt-6 text-sm text-ink-muted">
           Booking reference <span className="font-semibold text-ink tabular">{ref}</span>
         </p>
+      ) : null}
+      {state === "processing" && gaveUp ? (
+        <div className="mt-8 rounded-2xl bg-ivory px-5 py-4 text-sm text-ink">
+          <p>
+            Your bank hasn&apos;t confirmed the payment yet. Please don&apos;t pay again. If the money left
+            your account, the booking is confirmed automatically when it arrives, or the full amount comes
+            back to you. You&apos;ll get an email either way.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setGaveUp(false);
+              setRound((r) => r + 1);
+            }}
+            className="mt-3 font-semibold text-gold-800 underline underline-offset-4"
+          >
+            Check again
+          </button>
+        </div>
       ) : null}
       {action ? (
         <ButtonLink href={action.href} className="mt-10">

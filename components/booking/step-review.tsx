@@ -78,6 +78,8 @@ export function StepReview({
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState<Started | null>(null);
+  // The payment window was closed before Razorpay reported a result.
+  const [closed, setClosed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const turnstile = useRef<TurnstileInstance | undefined>(undefined);
   // A short pause after a failed attempt (the Worker also limits to 5 booking attempts a minute).
@@ -99,6 +101,7 @@ export function StepReview({
 
   async function pay(existing: Started | null) {
     setError(null);
+    setClosed(false);
     let s = existing && existing.holdExpiresAt > Date.now() + 30_000 ? existing : null;
     if (!s) {
       setPhase("starting");
@@ -137,7 +140,15 @@ export function StepReview({
       return;
     }
     if (!result) {
+      // Closed the window. With UPI the money can still go through in the app afterwards, so ask
+      // the server once: if the payment already landed (webhook), show the confirmation.
+      const after = await api<{ status: string }>(`/api/bookings/${s.reference}`);
+      if (after.ok && after.data.status === "confirmed") {
+        router.push(`/book/status?ref=${encodeURIComponent(s.reference)}`);
+        return;
+      }
       setPhase("idle");
+      setClosed(true);
       return;
     }
     setPhase("verifying");
@@ -240,6 +251,19 @@ export function StepReview({
                 className="mt-4 rounded-2xl border border-danger/30 bg-white px-4 py-3 text-sm text-danger"
               >
                 {error}
+              </p>
+            ) : null}
+            {closed && started ? (
+              <p className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-ink">
+                The payment window was closed. If you already paid in your UPI or bank app, don&apos;t pay
+                again: it is confirmed automatically within a few minutes.{" "}
+                <Link
+                  href={`/book/status?ref=${encodeURIComponent(started.reference)}`}
+                  className="font-semibold text-gold-800 underline underline-offset-4"
+                >
+                  Check your booking
+                </Link>
+                . Otherwise, press the button below to try again with the same booking.
               </p>
             ) : null}
             <Button

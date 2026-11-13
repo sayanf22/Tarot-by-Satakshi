@@ -22,15 +22,24 @@ export function paymentsConfigured(env: AppEnv) {
   return Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET && env.RAZORPAY_WEBHOOK_SECRET);
 }
 
-async function call<T>(env: AppEnv, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+async function call<T>(
+  env: AppEnv,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+  extraHeaders: Record<string, string> = {},
+): Promise<T> {
   const res = await fetch(`${apiBase(env)}${path}`, {
     method,
     headers: {
       Authorization: `Basic ${btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`)}`,
       "Content-Type": "application/json",
+      ...extraHeaders,
     },
     ...(method === "POST" ? { body: JSON.stringify(body ?? {}) } : {}),
-    signal: AbortSignal.timeout(8000),
+    // Razorpay waits 5 seconds for a webhook reply. A slow call fails at 4 s instead, so the
+    // webhook answers 500 in time and Razorpay retries it (every step below is safe to repeat).
+    signal: AbortSignal.timeout(4000),
   });
   if (!res.ok) {
     // Log the code only: Razorpay errors can echo customer details.
@@ -51,6 +60,8 @@ export type RzpPayment = {
   status: "created" | "authorized" | "captured" | "refunded" | "failed";
   method?: string;
   captured?: boolean;
+  /** Paise already refunded (0 when none). */
+  amount_refunded?: number;
 };
 
 export function createOrder(
@@ -78,7 +89,18 @@ export function capturePayment(env: AppEnv, paymentId: string, amountPaise: numb
   });
 }
 
-export function refundPayment(env: AppEnv, paymentId: string, amountPaise: number, note: string) {
+/**
+ * Full or partial refund. Razorpay's X-Refund-Idempotency header makes a retry (after a
+ * timeout, or the webhook and the cron racing) return the first refund instead of paying twice.
+ * The key is fixed per payment and reason, and the body must stay the same between retries.
+ */
+export function refundPayment(
+  env: AppEnv,
+  paymentId: string,
+  amountPaise: number,
+  note: string,
+  idempotencyKey = `refund_${paymentId}`,
+) {
   return call<{ id: string; status: string; amount: number }>(
     env,
     "POST",
@@ -88,6 +110,7 @@ export function refundPayment(env: AppEnv, paymentId: string, amountPaise: numbe
       speed: "normal",
       notes: { reason: note.slice(0, 200) },
     },
+    { "X-Refund-Idempotency": idempotencyKey.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 60) },
   );
 }
 

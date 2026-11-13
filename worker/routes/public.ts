@@ -34,6 +34,15 @@ import { verifyTurnstile } from "../lib/turnstile";
 
 export const publicRoutes = new Hono<AppContext>();
 
+/** "+91 98765 43210" or "098765-43210" → "+919876543210"; other countries keep their code. */
+export function razorpayContact(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (phone.trim().startsWith("+")) return `+${digits}`;
+  const local = digits.replace(/^0+/, "");
+  // A 10-digit number without a code is Indian; anything longer already has its country code.
+  return local.length === 10 ? `+91${local}` : `+${local}`;
+}
+
 /** What the booking page needs to know before it starts. */
 publicRoutes.get("/config", async (c) =>
   c.json({ payments: paymentsConfigured(c.env), contactInbox: await contactInbox(c.env.DB) }),
@@ -243,7 +252,8 @@ publicRoutes.post("/bookings", async (c) => {
         amount,
         currency: "INR",
         description: service.name,
-        prefill: { name: d.name, email: d.email, contact: d.phone },
+        // Razorpay only fills in the phone when it is "+" and digits; with spaces it asks again.
+        prefill: { name: d.name, email: d.email, contact: razorpayContact(d.phone) },
         // Close the checkout when the hold runs out.
         timeoutSec: Math.floor((holdUntil - now) / 1000),
       },

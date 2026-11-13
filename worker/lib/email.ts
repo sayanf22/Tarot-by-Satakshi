@@ -282,28 +282,36 @@ export async function sendBookingEmails(env: AppEnv, bookingId: string) {
 
 /**
  * After a refund: the client is told how much and when to expect it, and the admin
- * gets a copy. `why` is "slot_taken" (automatic) or "admin" (Refund in the admin).
+ * gets a copy. `why` is "slot_taken", "duplicate" or "too_late" (automatic) or "admin" (Refund in the admin).
  */
+export type RefundWhy = "slot_taken" | "duplicate" | "too_late" | "admin";
+
 export async function sendRefundEmails(
   env: AppEnv,
   bookingId: string,
   refundedPaise: number,
-  why: "slot_taken" | "admin",
+  why: RefundWhy,
+  ref = bookingId,
 ) {
   const b = await loadBooking(env, bookingId);
   if (!b) return;
   const { service, when } = bookingFacts(b);
   const amount = rupeeLabel(refundedPaise);
   const site = siteUrl(env);
-  const reason =
-    why === "slot_taken"
-      ? "Your payment went through after the time you chose had already been booked by someone else, so your booking couldn't be confirmed."
-      : "Your booking has been refunded.";
+  const reason = {
+    slot_taken:
+      "Your payment went through after the time you chose had already been booked by someone else, so your booking couldn't be confirmed.",
+    duplicate:
+      "We received a second payment for a booking that was already paid. Your booking stays confirmed, and the extra payment is refunded in full.",
+    too_late:
+      "Your payment only reached us after the session time had passed, so the booking couldn't go ahead.",
+    admin: "Your booking has been refunded.",
+  }[why];
 
   await sendMail(env, {
     kind: `refund.client.${why}`,
     to: b.client_email,
-    ref: b.id,
+    ref,
     replyTo: env.NOTIFY_EMAIL,
     subject: `Refund of ${amount} for ${service.name}`,
     html: layout(
@@ -322,11 +330,16 @@ export async function sendRefundEmails(
   await sendMail(env, {
     kind: `refund.owner.${why}`,
     to: env.NOTIFY_EMAIL,
-    ref: b.id,
+    ref,
     replyTo: b.client_email,
     subject: `Refunded ${amount}: ${service.name}, ${when}`,
     html: layout(
-      why === "slot_taken" ? "Automatic refund: time already taken" : "Refund sent",
+      {
+        slot_taken: "Automatic refund: time already taken",
+        duplicate: "Automatic refund: extra payment",
+        too_late: "Automatic refund: paid after the session time",
+        admin: "Refund sent",
+      }[why],
       [
         ["Reading", service.name],
         ["Time booked", when],

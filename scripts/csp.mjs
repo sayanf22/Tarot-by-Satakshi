@@ -33,11 +33,12 @@ function urlFor(file) {
 function policy(hashes) {
   return [
     "default-src 'self'",
-    `script-src 'self' ${hashes.join(" ")} https://*.razorpay.com https://challenges.cloudflare.com`,
+    // static.cloudflareinsights.com: Cloudflare Web Analytics, switched on in the dashboard.
+    `script-src 'self' ${hashes.join(" ")} https://*.razorpay.com https://challenges.cloudflare.com https://static.cloudflareinsights.com`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://*.razorpay.com",
     "font-src 'self'",
-    "connect-src 'self' https://*.razorpay.com https://challenges.cloudflare.com",
+    "connect-src 'self' https://*.razorpay.com https://challenges.cloudflare.com https://cloudflareinsights.com",
     "frame-src https://*.razorpay.com https://challenges.cloudflare.com",
     "form-action 'self' https://*.razorpay.com",
     "base-uri 'self'",

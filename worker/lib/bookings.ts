@@ -34,26 +34,31 @@ type PaymentRow = {
 /** Only waitUntil is needed, from a request or from the cron. */
 type WaitCtx = { waitUntil(promise: Promise<unknown>): void };
 
-export type SettleResult = "confirmed" | "already" | "refunded" | "ignored";
+export type SettleResult = "confirmed" | "already" | "refunded" | "duplicate" | "ignored";
 
-async function loadByOrder(env: AppEnv, orderId: string) {
-  const payment = await env.DB.prepare(
-    "SELECT booking_id, gateway_order_id, gateway_payment_id, amount_paise, status FROM payments WHERE gateway_order_id = ?1",
-  )
-    .bind(orderId)
-    .first<PaymentRow>();
-  if (!payment) return null;
-  const booking = await env.DB.prepare(
-    "SELECT id, status, start_at, end_at, hold_expires_at, amount_paise FROM bookings WHERE id = ?1",
-  )
-    .bind(payment.booking_id)
-    .first<BookingRow>();
-  return booking ? { payment, booking } : null;
+async function bookingStatus(env: AppEnv, id: string) {
+  return (
+    await env.DB.prepare("SELECT status FROM bookings WHERE id = ?1").bind(id).first<{ status: string }>()
+  )?.status;
 }
 
 /**
- * Turns a verified, captured Razorpay payment into a confirmed booking.
- * - The payment must match our order id, amount and currency (checked by the caller via paymentMatches).
+ * Refunds a captured payment in full. Safe to call more than once for the same payment:
+ * Razorpay's idempotency key returns the first refund, and a payment already refunded is skipped.
+ */
+async function refundInFull(env: AppEnv, p: RzpPayment, note: string) {
+  if ((p.amount_refunded ?? 0) >= p.amount || p.status === "refunded") return null;
+  return refundPayment(env, p.id, p.amount, note, `refund_${p.id}`);
+}
+
+/**
+ * Turns a verified Razorpay payment into a confirmed booking. Called by the checkout callback,
+ * the webhook and the cron, in any order and any number of times, possibly at the same moment.
+ * - The payment must match our order id, amount and currency.
+ * - A second payment for a booking that is already paid (Razorpay allows only one per order, but
+ *   a late-authorised attempt can still arrive) is never captured, and is refunded if captured.
+ * - A payment that arrives after the session time has passed is never captured; if Razorpay
+ *   already captured it, it is refunded in full.
  * - If the hold lapsed but the time is still free, the time is claimed again.
  * - If someone else booked the time meanwhile, the money is refunded in full automatically.
  */
@@ -66,17 +71,56 @@ export async function settlePayment(
   const found = await loadByOrder(env, p.order_id);
   if (!found) return "ignored";
   const { payment, booking } = found;
-  if (!paymentMatches(p, payment.gateway_order_id, payment.amount_paise)) return "ignored";
+  if (!paymentMatches(p, payment.gateway_order_id, payment.amount_paise)) {
+    await audit(env, actor, "payment.mismatch", booking.id, `payment ${p.id}`);
+    return "ignored";
+  }
+  if (p.status !== "authorized" && p.status !== "captured") return "ignored";
+
+  const now = Date.now();
+  const isOurPayment = !payment.gateway_payment_id || payment.gateway_payment_id === p.id;
+  const settled =
+    ["confirmed", "completed", "refunded"].includes(booking.status) ||
+    payment.status === "refunded" ||
+    payment.status === "refund_pending";
+
+  // 1. The booking is already settled by an earlier payment: this one is extra.
+  if (settled && !isOurPayment) {
+    if (p.status === "captured") {
+      try {
+        const refund = await refundInFull(env, p, "Extra payment for a booking that was already paid");
+        if (refund)
+          ctx.waitUntil(
+            sendRefundEmails(env, booking.id, refund.amount, "duplicate", `${booking.id}-${p.id}`),
+          );
+      } catch (err) {
+        console.error("extra payment refund failed", err instanceof Error ? err.message : "");
+        throw err; // 500 → Razorpay retries the webhook; the cron also tries again
+      }
+    }
+    // An authorised extra payment is left alone: Razorpay refunds it automatically.
+    await audit(env, actor, "payment.extra", booking.id, `payment ${p.id} (${p.status})`);
+    return "duplicate";
+  }
+  if (["confirmed", "completed"].includes(booking.status)) return "already";
+  if (booking.status === "refunded" || payment.status === "refunded" || payment.status === "refund_pending")
+    return "refunded";
+
+  // 2. Paid after the session should have started (a late authorisation can take up to 3 days).
+  if (booking.start_at <= now) {
+    if (p.status === "captured") {
+      const refund = await refundInFull(env, p, "Payment arrived after the session time");
+      await db_markRefunded(env, payment.gateway_order_id, booking.id, p.id, refund, now);
+      if (refund) ctx.waitUntil(sendRefundEmails(env, booking.id, refund.amount, "too_late"));
+    }
+    await audit(env, actor, "payment.too_late", booking.id, `payment ${p.id} (${p.status})`);
+    return "refunded";
+  }
 
   let paid = p;
   if (paid.status === "authorized") paid = await capturePayment(env, p.id, payment.amount_paise);
   if (paid.status !== "captured") return "ignored";
 
-  if (["confirmed", "completed"].includes(booking.status)) return "already";
-  if (booking.status === "refunded" || payment.status === "refunded" || payment.status === "refund_pending")
-    return "refunded";
-
-  const now = Date.now();
   const db = env.DB;
   // The same blocks the booking claimed when it was made (see unitsFor).
   const blocks = unitsFor(booking.start_at, Math.round((booking.end_at - booking.start_at) / MINUTE));
@@ -95,14 +139,17 @@ export async function settlePayment(
     )
     .bind(now, booking.id, expected);
 
-  // 1. The hold still owns its time blocks: confirm.
+  // 3. The hold still owns its time blocks: confirm. Only one caller can change the row.
   const [, confirmed] = await db.batch([markPaid, confirm]);
   let ok = (confirmed?.meta.changes ?? 0) > 0;
+  // Another caller (webhook, checkout callback or cron) confirmed it a moment ago.
+  if (!ok && ["confirmed", "completed"].includes((await bookingStatus(env, booking.id)) ?? ""))
+    return "already";
 
-  // 2. The hold lapsed and its blocks were released: claim them again if free.
+  // 4. The hold lapsed and its blocks were released: claim them again if free.
   if (!ok) {
     try {
-      await db.batch([
+      const results = await db.batch([
         db
           .prepare(
             `DELETE FROM booking_slot_units WHERE unit_start IN (SELECT value FROM json_each(?1))
@@ -117,10 +164,12 @@ export async function settlePayment(
         ),
         confirm,
       ]);
-      ok = true;
+      ok = (results.at(-1)?.meta.changes ?? 0) > 0;
     } catch {
       ok = false;
     }
+    if (!ok && ["confirmed", "completed"].includes((await bookingStatus(env, booking.id)) ?? ""))
+      return "already";
   }
 
   if (ok) {
@@ -129,29 +178,62 @@ export async function settlePayment(
     return "confirmed";
   }
 
-  // 3. The time was taken by another client: refund in full.
-  await db
-    .prepare("UPDATE payments SET status = 'refund_pending', updated_at = ?1 WHERE gateway_order_id = ?2")
+  // 5. The time was taken by another client: refund in full.
+  const lock = await db
+    .prepare(
+      "UPDATE payments SET status = 'refund_pending', updated_at = ?1 WHERE gateway_order_id = ?2 AND status IN ('created', 'failed', 'paid')",
+    )
     .bind(now, payment.gateway_order_id)
     .run();
+  // Someone else is already refunding it.
+  if (!lock.meta.changes) return "refunded";
   try {
-    const refund = await refundPayment(env, paid.id, payment.amount_paise, "Time slot no longer available");
-    await db.batch([
-      db
-        .prepare(
-          "UPDATE payments SET status = 'refunded', refund_id = ?1, refunded_paise = ?2, updated_at = ?3 WHERE gateway_order_id = ?4",
-        )
-        .bind(refund.id, refund.amount, now, payment.gateway_order_id),
-      db
-        .prepare("UPDATE bookings SET status = 'refunded', updated_at = ?1 WHERE id = ?2")
-        .bind(now, booking.id),
-    ]);
-    ctx.waitUntil(sendRefundEmails(env, booking.id, refund.amount, "slot_taken"));
+    const refund = await refundInFull(env, paid, "Time slot no longer available");
+    await db_markRefunded(env, payment.gateway_order_id, booking.id, paid.id, refund, now);
+    if (refund) ctx.waitUntil(sendRefundEmails(env, booking.id, refund.amount, "slot_taken"));
   } catch (err) {
+    // Left as refund_pending: the admin sees it, and the cron retries it (same idempotency key).
     console.error("auto refund failed", err instanceof Error ? err.message : "");
   }
   await audit(env, actor, "booking.slot_taken_refunded", booking.id, `payment ${paid.id}`);
   return "refunded";
+}
+
+/** Records a full refund on the payment and the booking. */
+async function db_markRefunded(
+  env: AppEnv,
+  orderId: string,
+  bookingId: string,
+  paymentId: string,
+  refund: { id: string; amount: number } | null,
+  now: number,
+) {
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE payments SET status = 'refunded', gateway_payment_id = COALESCE(gateway_payment_id, ?1),
+         refund_id = COALESCE(?2, refund_id), refunded_paise = COALESCE(?3, refunded_paise), updated_at = ?4
+       WHERE gateway_order_id = ?5`,
+    ).bind(paymentId, refund?.id ?? null, refund?.amount ?? null, now, orderId),
+    env.DB.prepare(
+      "UPDATE bookings SET status = 'refunded', hold_expires_at = NULL, updated_at = ?1 WHERE id = ?2 AND status IN ('held', 'expired')",
+    ).bind(now, bookingId),
+    env.DB.prepare("DELETE FROM booking_slot_units WHERE booking_id = ?1").bind(bookingId),
+  ]);
+}
+
+async function loadByOrder(env: AppEnv, orderId: string) {
+  const payment = await env.DB.prepare(
+    "SELECT booking_id, gateway_order_id, gateway_payment_id, amount_paise, status FROM payments WHERE gateway_order_id = ?1",
+  )
+    .bind(orderId)
+    .first<PaymentRow>();
+  if (!payment) return null;
+  const booking = await env.DB.prepare(
+    "SELECT id, status, start_at, end_at, hold_expires_at, amount_paise FROM bookings WHERE id = ?1",
+  )
+    .bind(payment.booking_id)
+    .first<BookingRow>();
+  return booking ? { payment, booking } : null;
 }
 
 /** Verifies a payment id with Razorpay (never trusting the browser) and settles it. */
@@ -200,6 +282,31 @@ export async function maintenance(env: AppEnv, ctx: WaitCtx) {
         if (good) await settlePayment(env, ctx, good, "cron");
       } catch (err) {
         console.error("reconcile failed", err instanceof Error ? err.message : "");
+      }
+    }
+
+    // Automatic refunds that Razorpay didn't accept (network error, timeout): try again.
+    // The idempotency key is the same as the first try, so this can never refund twice.
+    // Only automatic refunds (the booking never confirmed); admin refunds reset on failure.
+    const { results: stuck } = await db
+      .prepare(
+        `SELECT p.gateway_order_id, p.gateway_payment_id, p.booking_id FROM payments p
+         JOIN bookings b ON b.id = p.booking_id
+         WHERE p.status = 'refund_pending' AND p.gateway_payment_id IS NOT NULL
+           AND b.status IN ('held', 'expired') AND p.updated_at < ?1
+         ORDER BY p.updated_at LIMIT 5`,
+      )
+      .bind(now - 2 * MINUTE)
+      .all<{ gateway_order_id: string; gateway_payment_id: string; booking_id: string }>();
+    for (const r of stuck) {
+      try {
+        const p = await fetchPayment(env, r.gateway_payment_id);
+        const refund = await refundInFull(env, p, "Time slot no longer available");
+        await db_markRefunded(env, r.gateway_order_id, r.booking_id, p.id, refund, Date.now());
+        if (refund) ctx.waitUntil(sendRefundEmails(env, r.booking_id, refund.amount, "slot_taken"));
+        await audit(env, "cron", "refund.retried", r.booking_id, `payment ${p.id}`);
+      } catch (err) {
+        console.error("refund retry failed", err instanceof Error ? err.message : "");
       }
     }
   }

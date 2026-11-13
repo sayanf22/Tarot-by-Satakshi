@@ -393,6 +393,8 @@ adminRoutes.post("/bookings/:id/refund", async (c) => {
       p.gateway_payment_id,
       amount,
       body.data.reason || "Refund by Tarot by Satakshi",
+      // Same payment and amount → same key, so a retry after a timeout can't refund twice.
+      `admin_${p.gateway_payment_id}_${amount}`,
     );
     const now = Date.now();
     await c.env.DB.batch([
