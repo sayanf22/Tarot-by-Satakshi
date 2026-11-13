@@ -1,0 +1,16 @@
+{
+  "categories": [
+    {
+      "slug": "tarot",
+      "name": "Tarot",
+      "description": "",
+      "birthDetails": false
+    },
+    {
+      "slug": "astrology",
+      "name": "Astrology",
+      "description": "",
+      "birthDetails": true
+    }
+  ]
+}

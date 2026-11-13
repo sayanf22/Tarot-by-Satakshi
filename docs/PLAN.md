@@ -33,7 +33,7 @@ Sources: `docs/agreement.txt` (the contract, which governs), `docs/quotation.txt
 | Refunds | No refunds | Booking review step has a "non-refundable" consent; FAQ states it |
 | Payment gateway | Razorpay is fine; she has no account yet | **Razorpay confirmed.** She needs to sign up and complete KYC |
 | Photos, logo, reviews | She'll share them | Until then: an illustrated hero, a text wordmark, no testimonials section |
-| Contact | Email tarotwithsatakshi@gmail.com (booking alerts and dashboard login); phone 8882139419 | Phone and email on the Contact page and footer |
+| Contact | Email tarotwithsatakshi@gmail.com (booking alerts and dashboard login); phone and WhatsApp 9220219801 (set by the client on 13 Nov 2026) | Phone and email on the Contact page and footer |
 | After payment | A confirmation email | Client confirmation email, as planned |
 | Domain | Wants guidance on buying one | Guidance given in chat; the domain must be in her name |
 

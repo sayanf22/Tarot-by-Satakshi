@@ -49,7 +49,7 @@ const html = `<!doctype html>
       <div><b>Tarot by Satakshi</b></div>
       <div>Satakshi Kapoor, Founder</div>
       <div>Panchsheel Greens 2, Noida, Uttar Pradesh, India</div>
-      <div>+91 88821 39419</div>
+      <div>+91 92202 19801</div>
       <div>tarotwithsatakshi@gmail.com</div>
     </div>
     <div style="flex:1">
@@ -83,7 +83,7 @@ const html = `<!doctype html>
     The seller is not registered under GST, so no GST is charged on this invoice.<br/>
     Cancellation and refunds: https://guidancebysatakshi.com/refund-policy<br/>
     Terms and conditions: https://guidancebysatakshi.com/terms<br/>
-    Grievance officer: Satakshi Kapoor, Founder, tarotwithsatakshi@gmail.com, +91 88821 39419. We acknowledge every complaint within 48 hours and resolve it within one month.<br/>
+    Grievance officer: Satakshi Kapoor, Founder, tarotwithsatakshi@gmail.com, +91 92202 19801. We acknowledge every complaint within 48 hours and resolve it within one month.<br/>
     This is a computer-generated invoice and needs no signature.
   </div>
 </body></html>`;
@@ -93,7 +93,12 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage();
   await page.setContent(html, { waitUntil: "load" });
-  await page.pdf({ path: OUT, format: "A4", printBackground: true, margin: { top: "0", bottom: "0", left: "0", right: "0" } });
+  await page.pdf({
+    path: OUT,
+    format: "A4",
+    printBackground: true,
+    margin: { top: "0", bottom: "0", left: "0", right: "0" },
+  });
   console.log(`wrote ${OUT} (amount ${money})`);
 } finally {
   await browser.close();

@@ -1,1 +1,31 @@
-[]
+[
+  {
+    "slug": "adfsasdf",
+    "name": "Tarot reading",
+    "category": "astrology",
+    "summary": "This is one question tarot reading",
+    "icon": "eye",
+    "card": "two-cups",
+    "formats": [
+      "text"
+    ],
+    "durationMin": 15,
+    "pricePaise": 50000,
+    "bookable": true
+  },
+  {
+    "slug": "aa",
+    "name": "aa",
+    "category": "tarot",
+    "summary": "sadf",
+    "icon": "moon",
+    "card": "wheel",
+    "formats": [
+      "call",
+      "text"
+    ],
+    "durationMin": 20,
+    "pricePaise": 50000,
+    "bookable": true
+  }
+]

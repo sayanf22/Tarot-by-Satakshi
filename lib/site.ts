@@ -6,11 +6,11 @@ export const site = {
   firstName: "Satakshi",
   offering: "Tarot & Astrology",
   phone: {
-    display: "+91 88821 39419",
-    href: "tel:+918882139419",
+    display: "+91 92202 19801",
+    href: "tel:+919220219801",
   },
   /** The Contact form opens a chat with this number (digits only, with country code). Same as the phone. */
-  whatsapp: "918882139419",
+  whatsapp: "919220219801",
   email: "tarotwithsatakshi@gmail.com",
   hours: {
     days: "Monday to Saturday",

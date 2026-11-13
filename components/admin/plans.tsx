@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { Field, inputClasses } from "@/components/ui/field";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AdminCategories, type AdminCategory } from "./categories";
 import { blank, PlanForm, toForm, type Form, type Photo, type Plan } from "./plan-form";
 import { Badge, Empty, Notice, PageTitle, Panel, rupees, useAdminApi } from "./shared";
@@ -69,6 +70,16 @@ function SiteStatus({
   );
 }
 
+/** The formats a plan is offered in, as the save request expects them ("call" and/or "text"). */
+function formatsOf(p: Plan): ("call" | "text")[] {
+  return p.formats.split(",").filter((f): f is "call" | "text" => f === "call" || f === "text");
+}
+
+/** The server requires a price, a length and at least one format on every plan. */
+function canMove(p: Plan): boolean {
+  return p.duration_min !== null && p.price_paise !== null && formatsOf(p).length > 0;
+}
+
 export function AdminPlans() {
   const adminApi = useAdminApi();
   const [plans, setPlans] = useState<Plan[] | null>(null);
@@ -80,6 +91,8 @@ export function AdminPlans() {
   const [payments, setPayments] = useState<boolean | null>(null);
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [maxCategories, setMaxCategories] = useState(20);
+  const [deleting, setDeleting] = useState<Plan | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     const [p, m, c] = await Promise.all([
@@ -123,10 +136,49 @@ export function AdminPlans() {
     await load();
   }
 
-  async function remove(p: Plan) {
-    if (!confirm(`Delete ${p.name} for good?`)) return;
+  /** Moves a plan to another category. Sends the whole plan, the same body the edit form saves. */
+  async function moveTo(p: Plan, category: string) {
+    if (category === p.category || !canMove(p) || p.duration_min === null || p.price_paise === null) return;
+    setBusy(true);
+    const r = await adminApi(`/services/${p.slug}`, {
+      method: "PUT",
+      json: {
+        name: p.name,
+        category,
+        summary: p.summary,
+        icon: p.icon,
+        card: p.card,
+        formats: formatsOf(p),
+        durationMin: p.duration_min,
+        pricePaise: p.price_paise,
+        active: p.active === 1,
+        sortOrder: p.sort_order,
+        imageKey: p.image_key,
+      },
+    });
+    setBusy(false);
+    const to = categories.find((c) => c.slug === category)?.name ?? category;
+    setMsg(
+      r.ok
+        ? { tone: "ok", text: `${p.name} is now in ${to}. The Services page is updated.` }
+        : { tone: "error", text: r.error },
+    );
+    await load();
+  }
+
+  /** Deletes a plan after the admin types "delete". The server refuses while sessions are still to come. */
+  async function removePlan() {
+    const p = deleting;
+    if (!p) return;
+    setBusy(true);
     const r = await adminApi(`/services/${p.slug}`, { method: "DELETE" });
-    setMsg(r.ok ? { tone: "ok", text: `${p.name} deleted.` } : { tone: "error", text: r.error });
+    setBusy(false);
+    setDeleting(null);
+    setMsg(
+      r.ok
+        ? { tone: "ok", text: `${p.name} is deleted. Its past bookings stay in Bookings.` }
+        : { tone: "error", text: r.error },
+    );
     await load();
   }
 
@@ -235,9 +287,30 @@ export function AdminPlans() {
                   <p className="text-sm text-ink-muted">
                     {p.category_name} · {p.duration_min ? `${p.duration_min} min` : "no length"} ·{" "}
                     {p.price_paise ? rupees(p.price_paise) : "no price"} · {p.booking_count} bookings
+                    {p.upcoming_count > 0 ? ` · ${p.upcoming_count} still to come` : ""}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-ink-muted">
+                    Move to
+                    <select
+                      aria-label={`Move ${p.name} to another category`}
+                      className={cn(inputClasses, "w-auto py-2 text-sm")}
+                      value={p.category}
+                      disabled={busy || !canMove(p)}
+                      title={canMove(p) ? undefined : "Set a price and length first (Edit)."}
+                      onChange={(e) => void moveTo(p, e.target.value)}
+                    >
+                      {categories
+                        .filter((c) => c.active || c.slug === p.category)
+                        .map((c) => (
+                          <option key={c.slug} value={c.slug}>
+                            {c.name}
+                            {c.active ? "" : " (hidden)"}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
                   <Button
                     size="sm"
                     variant="outline"
@@ -254,17 +327,43 @@ export function AdminPlans() {
                       Archive
                     </Button>
                   )}
-                  {p.booking_count === 0 ? (
-                    <Button size="sm" variant="outline" onClick={() => void remove(p)}>
+                  <span
+                    title={
+                      p.upcoming_count > 0
+                        ? "This plan has sessions still to come. Archive it instead, or delete it after those sessions."
+                        : undefined
+                    }
+                  >
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || p.upcoming_count > 0}
+                      onClick={() => setDeleting(p)}
+                    >
                       Delete
                     </Button>
-                  ) : null}
+                  </span>
                 </div>
               </li>
             ))}
           </ul>
         )}
       </Panel>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title={`Delete ${deleting?.name ?? "this plan"}?`}
+        word="delete"
+        confirmLabel="Delete plan"
+        busy={busy}
+        onConfirm={() => void removePlan()}
+        onCancel={() => setDeleting(null)}
+      >
+        <p>
+          The plan is removed from the website and the admin. Past bookings stay in Bookings with their own
+          copy of the plan. This can&apos;t be undone.
+        </p>
+      </ConfirmDialog>
     </>
   );
 }

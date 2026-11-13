@@ -483,10 +483,13 @@ const planFields = z.object({
 adminRoutes.get("/services", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT s.*, COALESCE(c.name, s.category) AS category_name,
-       (SELECT count(*) FROM bookings b WHERE b.service_id = s.id) AS booking_count
+       (SELECT count(*) FROM bookings b WHERE b.service_id = s.id) AS booking_count,
+       (SELECT count(*) FROM bookings b WHERE b.service_id = s.id AND b.status = 'confirmed' AND b.start_at >= ?1) AS upcoming_count
      FROM services s LEFT JOIN categories c ON c.slug = s.category
      ORDER BY s.archived, s.sort_order, s.id`,
-  ).all<ServiceRow & { booking_count: number }>();
+  )
+    .bind(Date.now())
+    .all<ServiceRow & { booking_count: number; upcoming_count: number }>();
   return c.json({
     services: results,
     homeCards: await homeCards(c.env.DB),
@@ -800,6 +803,15 @@ adminRoutes.delete("/services/:slug", async (c) => {
     .bind(slug)
     .first<{ id: number; image_key: string | null }>();
   if (!plan) fail(404, "Plan not found");
+  // A plan with sessions still to come can't be deleted: those clients would lose their link to it.
+  // Archive it instead, or delete it once those sessions have happened.
+  const upcoming = await c.env.DB.prepare(
+    "SELECT count(*) AS n FROM bookings WHERE service_id = ?1 AND status = 'confirmed' AND start_at >= ?2",
+  )
+    .bind(plan.id, Date.now())
+    .first<{ n: number }>();
+  if ((upcoming?.n ?? 0) > 0)
+    fail(409, "This plan has sessions still to come. Archive it instead, or delete it after those sessions.");
   await c.env.DB.prepare("DELETE FROM services WHERE id = ?1").bind(plan.id).run();
   let imageDeleted = false;
   if (plan.image_key) {

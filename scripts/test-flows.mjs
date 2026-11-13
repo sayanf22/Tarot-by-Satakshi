@@ -1342,6 +1342,126 @@ ok(
   );
 }
 
+// ---- Plans: move to another category, and when a plan may be deleted ----
+{
+  const tag = String(Date.now()).slice(-5);
+  const admin = (path, opts = {}) => api(path, { cookie, ip: "10.0.10.1", ...opts });
+  const planBody = (over) => ({
+    name: `Move ${tag}`,
+    category: "tarot",
+    summary: "",
+    icon: "star",
+    card: "wheel",
+    formats: ["call", "text"],
+    durationMin: 60,
+    pricePaise: 50000,
+    active: true,
+    sortOrder: 8,
+    imageKey: null,
+    ...over,
+  });
+  const slug = `mv-${tag}`;
+  const clientName = `Move Client ${tag}`;
+
+  const shown = (await admin("/api/admin/categories")).data.categories.filter((c) => c.active);
+  const [from, to] = shown;
+  ok("two shown categories exist to move a plan between", Boolean(from && to), String(shown.length));
+  if (!from || !to) process.exit(1);
+
+  const made = await admin("/api/admin/services", {
+    method: "POST",
+    json: { slug, ...planBody({ category: from.slug }) },
+  });
+  ok("a plan is created for the move checks", made.status === 201, JSON.stringify(made.data));
+
+  // Move: the plan is saved in the other category, and the site and admin show it there.
+  const moved = await admin(`/api/admin/services/${slug}`, {
+    method: "PUT",
+    json: planBody({ category: to.slug }),
+  });
+  ok("a plan moves to another category", moved.status === 200, JSON.stringify(moved.data));
+  const pub = await api("/api/services", { ip: "10.0.10.5" });
+  const onSite = pub.data.services.find((s) => s.slug === slug);
+  ok(
+    "the site lists the moved plan under its new category",
+    onSite?.category === to.slug && onSite?.categoryName === to.name,
+    `${onSite?.category} / ${onSite?.categoryName}`,
+  );
+  const listed = (await admin("/api/admin/services")).data.services.find((s) => s.slug === slug);
+  ok("the admin list shows the new category", listed?.category === to.slug, listed?.category_name);
+
+  // A plan can't be moved into a hidden category.
+  const hiddenCat = await admin("/api/admin/categories", {
+    method: "POST",
+    json: { name: `Move hidden ${tag}`, birthDetails: false, active: false },
+  });
+  ok(
+    "a hidden category is made for the move check",
+    hiddenCat.status === 201,
+    JSON.stringify(hiddenCat.data),
+  );
+  const intoHidden = await admin(`/api/admin/services/${slug}`, {
+    method: "PUT",
+    json: planBody({ category: hiddenCat.data.slug }),
+  });
+  ok("a plan can't be moved into a hidden category", intoHidden.status === 400, intoHidden.data?.error);
+  await admin(`/api/admin/categories/${hiddenCat.data.slug}`, { method: "DELETE" });
+
+  // Delete: refused while a confirmed session is still to come.
+  let day = null;
+  for (let d = 2; d < 40 && !day; d++) {
+    const date = new Date(Date.now() + d * 864e5 + 5.5 * 36e5).toISOString().slice(0, 10);
+    const { data } = await api(`/api/slots?service=${slug}&date=${date}`, { ip: "10.0.10.4" });
+    const free = (data.slots ?? []).find((s) => s.status === "free");
+    if (free) day = { date, time: free.value };
+  }
+  const booked = await api("/api/bookings", {
+    method: "POST",
+    ip: "10.0.10.2",
+    json: {
+      service: slug,
+      format: "call",
+      date: day?.date,
+      time: day?.time,
+      agreed: true,
+      details: details(clientName),
+    },
+  });
+  ok("a session is booked on the plan", booked.status === 201, JSON.stringify(booked.data));
+  const ref = booked.data.reference;
+  const paid = await pay(booked.data.checkout.orderId);
+  const v = await verify(ref, paid, "10.0.10.2");
+  ok("the session is paid and confirmed", v.data.result === "confirmed", String(v.data.result));
+
+  const blocked = await admin(`/api/admin/services/${slug}`, { method: "DELETE" });
+  ok(
+    "a plan with a confirmed session still to come can't be deleted",
+    blocked.status === 409 && /sessions still to come/.test(blocked.data?.error ?? ""),
+    `${blocked.status} ${blocked.data?.error}`,
+  );
+  const counted = (await admin("/api/admin/services")).data.services.find((s) => s.slug === slug);
+  ok("the admin list counts that session", counted?.upcoming_count === 1, String(counted?.upcoming_count));
+
+  // Once the session is cancelled, the plan can be deleted. The booking stays, with its own copy of the plan.
+  const cancelled = await admin(`/api/admin/bookings/${ref}`, {
+    method: "PATCH",
+    json: { action: "cancel" },
+  });
+  ok("the session is cancelled", cancelled.status === 200, JSON.stringify(cancelled.data));
+  const gone = await admin(`/api/admin/services/${slug}`, { method: "DELETE" });
+  ok("with no session left to come, the plan is deleted", gone.status === 200, JSON.stringify(gone.data));
+  const kept = (await admin(`/api/admin/bookings/${ref}`)).data.booking;
+  ok(
+    "the cancelled booking stays, with its own copy of the plan",
+    kept?.status === "cancelled" &&
+      kept.service_id === null &&
+      JSON.parse(kept.service_snapshot).name === `Move ${tag}`,
+    JSON.stringify({ status: kept?.status, serviceId: kept?.service_id }),
+  );
+  const stillListed = (await admin("/api/admin/services")).data.services.some((s) => s.slug === slug);
+  ok("the deleted plan is no longer listed", !stillListed);
+}
+
 const out = await api("/api/admin/logout", { method: "POST", json: {}, cookie });
 ok(
   "sign-out ends the session",

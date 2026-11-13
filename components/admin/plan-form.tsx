@@ -30,6 +30,8 @@ export type Plan = {
   sort_order: number;
   image_key: string | null;
   booking_count: number;
+  /** Confirmed sessions that haven't happened yet. A plan with any can't be deleted. */
+  upcoming_count: number;
 };
 
 export type Photo = { key: string; alt: string };
