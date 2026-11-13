@@ -93,6 +93,9 @@ export function AdminPlans() {
   const [maxCategories, setMaxCategories] = useState(20);
   const [deleting, setDeleting] = useState<Plan | null>(null);
   const [busy, setBusy] = useState(false);
+  // Unsaved choices. Nothing is sent until the matching Save button is pressed.
+  const [moves, setMoves] = useState<Record<string, string>>({});
+  const [homeDraft, setHomeDraft] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const [p, m, c] = await Promise.all([
@@ -157,6 +160,7 @@ export function AdminPlans() {
       },
     });
     setBusy(false);
+    if (r.ok) cancelMove(p.slug);
     const to = categories.find((c) => c.slug === category)?.name ?? category;
     setMsg(
       r.ok
@@ -182,8 +186,29 @@ export function AdminPlans() {
     await load();
   }
 
+  function chooseMove(p: Plan, category: string) {
+    setMsg(null);
+    setMoves((m) => {
+      const next = { ...m };
+      if (category === p.category) delete next[p.slug];
+      else next[p.slug] = category;
+      return next;
+    });
+  }
+
+  function cancelMove(slug: string) {
+    setMoves((m) => {
+      const next = { ...m };
+      delete next[slug];
+      return next;
+    });
+  }
+
   async function saveHome(value: number) {
+    setBusy(true);
     const r = await adminApi("/home-cards", { method: "PUT", json: { homeCards: value } });
+    setBusy(false);
+    if (r.ok) setHomeDraft(null);
     setMsg(
       r.ok
         ? { tone: "ok", text: `Saved. The home page now shows up to ${value} plans.` }
@@ -215,31 +240,47 @@ export function AdminPlans() {
 
       <SiteStatus liveCount={liveCount} payments={payments} publish={publish} />
       <AdminCategories categories={categories} max={maxCategories} reload={load} />
-      {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
       {home ? (
         <Panel title="Home page">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <Field
+          <Field
+            id="home-cards"
+            label="Plans in the home page deck"
+            hint={`The first ${homeDraft ?? home.value} live plans, in order. The Services and Pricing pages always list every plan.`}
+          >
+            <select
               id="home-cards"
-              label="Plans in the home page deck"
-              hint={`The first ${home.value} live plans, in order. The Services and Pricing pages always list every plan.`}
-              className="sm:flex-1"
+              aria-describedby="home-cards-hint"
+              className={cn(inputClasses, homeDraft !== null ? "border-gold-700 bg-champagne" : "")}
+              value={homeDraft ?? home.value}
+              disabled={busy}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setMsg(null);
+                setHomeDraft(v === home.value ? null : v);
+              }}
             >
-              <select
-                id="home-cards"
-                aria-describedby="home-cards-hint"
-                className={inputClasses}
-                value={home.value}
-                onChange={(e) => void saveHome(Number(e.target.value))}
-              >
-                {Array.from({ length: home.max - home.min + 1 }, (_, i) => home.min + i).map((v) => (
-                  <option key={v} value={v}>
-                    {v} plans
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
+              {Array.from({ length: home.max - home.min + 1 }, (_, i) => home.min + i).map((v) => (
+                <option key={v} value={v}>
+                  {v} plans
+                </option>
+              ))}
+            </select>
+          </Field>
+          {homeDraft !== null ? (
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl bg-champagne p-4 ring-1 ring-gold-500/60 sm:flex-row sm:items-center">
+              <output className="block text-sm font-semibold text-ink sm:flex-1">
+                Not saved yet: {home.value} → {homeDraft} plans.
+              </output>
+              <div className="grid grid-cols-2 gap-2 sm:flex">
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => setHomeDraft(null)}>
+                  Cancel
+                </Button>
+                <Button size="sm" disabled={busy} onClick={() => void saveHome(homeDraft)}>
+                  {busy ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </Panel>
       ) : null}
 
@@ -262,6 +303,7 @@ export function AdminPlans() {
         </Panel>
       ) : null}
 
+      {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
       <Panel>
         {!plans ? (
           <p className="text-ink-muted">Loading…</p>
@@ -269,83 +311,123 @@ export function AdminPlans() {
           <Empty>No plans yet. Add your first one.</Empty>
         ) : (
           <ul className="divide-y divide-line">
-            {plans.map((p) => (
-              <li key={p.slug} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:gap-4">
-                <div className="min-w-0 sm:flex-1">
-                  <p className="font-semibold text-ink">
-                    {p.name}{" "}
-                    {p.archived ? (
-                      <Badge>Archived</Badge>
-                    ) : !p.active ? (
-                      <Badge>Hidden</Badge>
-                    ) : p.is_sample ? (
-                      <Badge tone="gold">Sample</Badge>
-                    ) : (
-                      <Badge tone="green">Live</Badge>
-                    )}
-                  </p>
-                  <p className="text-sm text-ink-muted">
-                    {p.category_name} · {p.duration_min ? `${p.duration_min} min` : "no length"} ·{" "}
-                    {p.price_paise ? rupees(p.price_paise) : "no price"} · {p.booking_count} bookings
-                    {p.upcoming_count > 0 ? ` · ${p.upcoming_count} still to come` : ""}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2 text-sm text-ink-muted">
-                    Move to
-                    <select
-                      aria-label={`Move ${p.name} to another category`}
-                      className={cn(inputClasses, "w-auto py-2 text-sm")}
-                      value={p.category}
-                      disabled={busy || !canMove(p)}
-                      title={canMove(p) ? undefined : "Set a price and length first (Edit)."}
-                      onChange={(e) => void moveTo(p, e.target.value)}
-                    >
-                      {categories
-                        .filter((c) => c.active || c.slug === p.category)
-                        .map((c) => (
-                          <option key={c.slug} value={c.slug}>
-                            {c.name}
-                            {c.active ? "" : " (hidden)"}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setEditing({ form: toForm(p), isNew: false })}
-                  >
-                    Edit
-                  </Button>
-                  {p.archived ? (
-                    <Button size="sm" variant="outline" onClick={() => void archive(p, false)}>
-                      Restore
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => void archive(p, true)}>
-                      Archive
-                    </Button>
-                  )}
-                  <span
-                    title={
-                      p.upcoming_count > 0
-                        ? "This plan has sessions still to come. Archive it instead, or delete it after those sessions."
-                        : undefined
-                    }
-                  >
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy || p.upcoming_count > 0}
-                      onClick={() => setDeleting(p)}
-                    >
-                      Delete
-                    </Button>
-                  </span>
-                </div>
-              </li>
-            ))}
+            {plans.map((p) => {
+              const pending = moves[p.slug];
+              const waitForMove = pending ? "Save or cancel the move first." : undefined;
+              return (
+                <li key={p.slug} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="min-w-0 sm:flex-1">
+                    <p className="font-semibold text-ink">
+                      {p.name}{" "}
+                      {p.archived ? (
+                        <Badge>Archived</Badge>
+                      ) : !p.active ? (
+                        <Badge>Hidden</Badge>
+                      ) : p.is_sample ? (
+                        <Badge tone="gold">Sample</Badge>
+                      ) : (
+                        <Badge tone="green">Live</Badge>
+                      )}
+                    </p>
+                    <p className="text-sm text-ink-muted">
+                      {p.category_name} · {p.duration_min ? `${p.duration_min} min` : "no length"} ·{" "}
+                      {p.price_paise ? rupees(p.price_paise) : "no price"} · {p.booking_count} bookings
+                      {p.upcoming_count > 0 ? ` · ${p.upcoming_count} still to come` : ""}
+                    </p>
+                    {pending ? (
+                      <p className="mt-1 text-sm font-semibold text-gold-800">
+                        Not saved yet: moving to {categories.find((c) => c.slug === pending)?.name ?? pending}
+                        .
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <label htmlFor={`move-${p.slug}`} className="text-sm font-medium text-ink-muted">
+                        Move to
+                      </label>
+                      <select
+                        id={`move-${p.slug}`}
+                        className={cn(
+                          inputClasses,
+                          "py-2.5 text-sm sm:w-auto",
+                          pending ? "border-gold-700 bg-champagne" : "",
+                        )}
+                        value={pending ?? p.category}
+                        disabled={busy || !canMove(p)}
+                        title={canMove(p) ? undefined : "Set a price and length first (Edit)."}
+                        onChange={(e) => chooseMove(p, e.target.value)}
+                      >
+                        {categories
+                          .filter((c) => c.active || c.slug === p.category)
+                          .map((c) => (
+                            <option key={c.slug} value={c.slug}>
+                              {c.name}
+                              {c.active ? "" : " (hidden)"}
+                            </option>
+                          ))}
+                      </select>
+                      {pending ? (
+                        <div className="grid grid-cols-2 gap-2 sm:flex">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => cancelMove(p.slug)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button size="sm" disabled={busy} onClick={() => void moveTo(p, pending)}>
+                            {busy ? "Saving…" : "Save"}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 sm:flex">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="px-3 sm:px-5"
+                        disabled={busy || Boolean(pending)}
+                        title={waitForMove}
+                        onClick={() => setEditing({ form: toForm(p), isNew: false })}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="px-3 sm:px-5"
+                        disabled={busy || Boolean(pending)}
+                        title={waitForMove}
+                        onClick={() => void archive(p, !p.archived)}
+                      >
+                        {p.archived ? "Restore" : "Archive"}
+                      </Button>
+                      <span
+                        className="grid"
+                        title={
+                          waitForMove ??
+                          (p.upcoming_count > 0
+                            ? "This plan has sessions still to come. Archive it instead, or delete it after those sessions."
+                            : undefined)
+                        }
+                      >
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="px-3 sm:px-5"
+                          disabled={busy || Boolean(pending) || p.upcoming_count > 0}
+                          onClick={() => setDeleting(p)}
+                        >
+                          Delete
+                        </Button>
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Panel>

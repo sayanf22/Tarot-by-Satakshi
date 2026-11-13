@@ -137,6 +137,16 @@ export function AdminCategories({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const atLimit = categories.length >= max;
+  // Unsaved order (slugs, top to bottom), or null when the list is as saved.
+  const [order, setOrder] = useState<string[] | null>(null);
+  const list: AdminCategory[] = order
+    ? [
+        ...order.flatMap((s) => categories.filter((c) => c.slug === s)),
+        ...categories.filter((c) => !order.includes(c.slug)),
+      ]
+    : categories;
+  const orderChanged = order !== null;
+  const waitForOrder = orderChanged ? "Save or cancel the new order first." : undefined;
 
   // One place for every change: send, show the answer, reload the list.
   async function change(
@@ -210,15 +220,25 @@ export function AdminCategories({
     );
   }
 
-  async function move(index: number, by: -1 | 1) {
+  // The arrows change this draft order only. Nothing is saved until "Save order" is pressed.
+  function move(index: number, by: -1 | 1) {
     const next = index + by;
-    if (next < 0 || next >= categories.length) return;
-    const slugs = categories.map((c) => c.slug);
+    if (next < 0 || next >= list.length) return;
+    const slugs = list.map((c) => c.slug);
     [slugs[index], slugs[next]] = [slugs[next]!, slugs[index]!];
-    await change(async () => {
+    const same = slugs.every((s, i) => s === categories[i]?.slug);
+    setOrder(same ? null : slugs);
+    setMsg(null);
+  }
+
+  async function saveOrder() {
+    if (!order) return;
+    const slugs = list.map((c) => c.slug);
+    const ok = await change(async () => {
       const r = await adminApi("/categories/reorder", { method: "POST", json: { slugs } });
       return r.ok ? { ok: true } : { ok: false, error: r.error };
     }, "Order saved. The Services page follows this order.");
+    if (ok) setOrder(null);
   }
 
   async function remove() {
@@ -281,7 +301,7 @@ export function AdminCategories({
         </p>
       ) : (
         <ul className="divide-y divide-line">
-          {categories.map((c, i) => (
+          {list.map((c, i) => (
             <li key={c.slug} className="py-4">
               {editing?.slug === c.slug ? (
                 <form onSubmit={saveEdit} className="space-y-5">
@@ -312,29 +332,34 @@ export function AdminCategories({
                       {c.description ? ` · ${c.description}` : ""}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  {/* Phone: arrows on one row, then Edit, Hide and Delete in three equal columns. */}
+                  <div className="grid grid-cols-6 gap-2 sm:flex sm:flex-wrap">
                     <Button
                       size="sm"
                       variant="outline"
+                      className="col-span-3"
                       aria-label={`Move ${c.name} up`}
                       disabled={busy || i === 0}
-                      onClick={() => void move(i, -1)}
+                      onClick={() => move(i, -1)}
                     >
                       <ArrowUp className="size-4" aria-hidden="true" />
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
+                      className="col-span-3"
                       aria-label={`Move ${c.name} down`}
-                      disabled={busy || i === categories.length - 1}
-                      onClick={() => void move(i, 1)}
+                      disabled={busy || i === list.length - 1}
+                      onClick={() => move(i, 1)}
                     >
                       <ArrowDown className="size-4" aria-hidden="true" />
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={busy}
+                      className="col-span-2 px-3 sm:px-5"
+                      disabled={busy || orderChanged}
+                      title={waitForOrder}
                       onClick={() =>
                         setEditing({
                           slug: c.slug,
@@ -354,7 +379,9 @@ export function AdminCategories({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={busy}
+                      className="col-span-2 px-3 sm:px-5"
+                      disabled={busy || orderChanged}
+                      title={waitForOrder}
                       onClick={() => void setShown(c, !c.active)}
                     >
                       {c.active ? (
@@ -367,9 +394,13 @@ export function AdminCategories({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={busy || c.planCount > 0}
+                      className="col-span-2 px-3 sm:px-5"
+                      disabled={busy || orderChanged || c.planCount > 0}
                       title={
-                        c.planCount > 0 ? "Move or delete its plans first, or hide the category." : undefined
+                        waitForOrder ??
+                        (c.planCount > 0
+                          ? "Move or delete its plans first, or hide the category."
+                          : undefined)
                       }
                       onClick={() => setDeleting(c)}
                     >
@@ -383,6 +414,22 @@ export function AdminCategories({
           ))}
         </ul>
       )}
+
+      {orderChanged ? (
+        <div className="sticky bottom-3 z-10 mt-4 flex flex-col gap-3 rounded-2xl bg-champagne p-4 shadow-soft ring-1 ring-gold-500/60 sm:flex-row sm:items-center">
+          <output className="block text-sm font-semibold text-ink sm:flex-1">
+            The order has changed. Save it to update the Services page.
+          </output>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setOrder(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => void saveOrder()}>
+              {busy ? "Saving…" : "Save order"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <ConfirmDialog
         open={deleting !== null}
