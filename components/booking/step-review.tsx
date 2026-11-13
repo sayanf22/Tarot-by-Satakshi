@@ -1,12 +1,10 @@
-import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { format } from "date-fns";
 import { Lock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SessionLength } from "@/components/services/service-card";
 import { Button } from "@/components/ui/button";
-import { TurnstileField } from "@/components/ui/turnstile-field";
 import { api } from "@/lib/api";
 import { openCheckout, type Checkout } from "@/lib/booking/razorpay-checkout";
 import { formatPrice } from "@/lib/format";
@@ -74,18 +72,16 @@ export function StepReview({
 }: Props) {
   const router = useRouter();
   const [agreed, setAgreed] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState<Started | null>(null);
   // The payment window was closed before Razorpay reported a result.
   const [closed, setClosed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const turnstile = useRef<TurnstileInstance | undefined>(undefined);
   // A short pause after a failed attempt (the Worker also limits to 5 booking attempts a minute).
   const retryPause = useCooldown();
 
-  const needsBirth = service.category === "astrology";
+  const needsBirth = service.birthDetails;
   const birthTime = details.birthTimeUnknown
     ? `Not known${details.birthTimeApprox ? ` (about ${details.birthTimeApprox})` : ""}`
     : details.birthTime;
@@ -114,11 +110,8 @@ export function StepReview({
           time,
           agreed: true,
           details,
-          turnstileToken: token ?? undefined,
         },
       });
-      turnstile.current?.reset();
-      setToken(null);
       if (!res.ok) {
         setPhase("idle");
         // 409: another client holds or booked this time. Send them back to pick another.
@@ -234,17 +227,13 @@ export function StepReview({
                 guardian booking for someone under 18.
               </span>
             </label>
-            {!started ? (
-              <div className="mt-5">
-                <TurnstileField ref={turnstile} action="booking" onToken={setToken} />
-              </div>
-            ) : (
+            {started ? (
               <output className="mt-5 block rounded-2xl bg-white px-4 py-3 text-sm text-ink">
                 {holdLeft > 0
-                  ? `Your time is held for ${mins}:${secs}. Finish paying to confirm it.`
-                  : "The hold has ended. Paying again will check the time is still free."}
+                  ? `Finish paying within ${mins}:${secs}. The time is yours once the payment succeeds.`
+                  : "The payment window has closed. Press Pay again: if the time is still free, it is booked for you when the payment succeeds."}
               </output>
-            )}
+            ) : null}
             {error ? (
               <p
                 role="alert"
@@ -268,7 +257,7 @@ export function StepReview({
             ) : null}
             <Button
               className="mt-6 w-full"
-              disabled={!agreed || busy || retryPause.active || (!started && !token)}
+              disabled={!agreed || busy || retryPause.active}
               onClick={() => void pay(started)}
             >
               <Lock className="size-4" aria-hidden="true" />

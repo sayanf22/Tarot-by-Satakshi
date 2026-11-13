@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { Field, inputClasses } from "@/components/ui/field";
+import { AdminCategories, type AdminCategory } from "./categories";
 import { blank, PlanForm, toForm, type Form, type Photo, type Plan } from "./plan-form";
 import { Badge, Empty, Notice, PageTitle, Panel, rupees, useAdminApi } from "./shared";
 type PublishState = { auto: boolean; pending: boolean; lastBuildAt: number | null };
@@ -77,9 +78,11 @@ export function AdminPlans() {
   const [home, setHome] = useState<{ value: number; min: number; max: number } | null>(null);
   const [publish, setPublish] = useState<PublishState | null>(null);
   const [payments, setPayments] = useState<boolean | null>(null);
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [maxCategories, setMaxCategories] = useState(20);
 
   const load = useCallback(async () => {
-    const [p, m] = await Promise.all([
+    const [p, m, c] = await Promise.all([
       adminApi<{
         services: Plan[];
         homeCards: number;
@@ -88,12 +91,17 @@ export function AdminPlans() {
         payments: boolean;
       }>("/services"),
       adminApi<{ media: Photo[] }>("/media"),
+      adminApi<{ categories: AdminCategory[]; max: number }>("/categories"),
     ]);
     if (p.ok) {
       setPlans(p.data.services);
       setHome({ value: p.data.homeCards, ...p.data.homeCardsRange });
       setPublish(p.data.publish);
       setPayments(p.data.payments);
+    }
+    if (c.ok) {
+      setCategories(c.data.categories);
+      setMaxCategories(c.data.max);
     }
     if (m.ok) setPhotos(m.data.media.map((x) => ({ key: x.key, alt: x.alt })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,13 +150,19 @@ export function AdminPlans() {
       <PageTitle
         title="Plans"
         action={
-          <Button size="sm" onClick={() => setEditing({ form: blank, isNew: true })}>
+          <Button
+            size="sm"
+            disabled={!categories.some((c) => c.active)}
+            title={categories.some((c) => c.active) ? undefined : "Add a category first"}
+            onClick={() => setEditing({ form: blank, isNew: true })}
+          >
             Add a plan
           </Button>
         }
       />
 
       <SiteStatus liveCount={liveCount} payments={payments} publish={publish} />
+      <AdminCategories categories={categories} max={maxCategories} reload={load} />
       {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
       {home ? (
         <Panel title="Home page">
@@ -184,6 +198,7 @@ export function AdminPlans() {
             initial={editing.form}
             isNew={editing.isNew}
             photos={photos}
+            categories={categories}
             others={(plans ?? []).filter((p) => p.slug !== editing.form.slug)}
             onDone={() => setEditing(null)}
             onSaved={(text) => {
@@ -218,8 +233,7 @@ export function AdminPlans() {
                     )}
                   </p>
                   <p className="text-sm text-ink-muted">
-                    {p.category === "astrology" ? "Astrology" : "Tarot"} ·{" "}
-                    {p.duration_min ? `${p.duration_min} min` : "no length"} ·{" "}
+                    {p.category_name} · {p.duration_min ? `${p.duration_min} min` : "no length"} ·{" "}
                     {p.price_paise ? rupees(p.price_paise) : "no price"} · {p.booking_count} bookings
                   </p>
                 </div>

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { SessionLength } from "@/components/services/service-card";
 import { formatPrice } from "@/lib/format";
 import { site } from "@/lib/site";
-import { categoryLabels, sessionLabel, type Service } from "@/lib/types";
+import { sessionLabel, type Service } from "@/lib/types";
 
 type Priced = Service & { pricePaise: number };
 
@@ -49,7 +49,7 @@ export function PricingRow({ s }: { s: Service & { pricePaise: number } }) {
         {s.image ? <PlanPhoto src={s.image} alt={s.name} /> : null}
         <div className="flex min-w-0 flex-1 flex-col gap-6 @4xl:flex-row @4xl:items-center @4xl:justify-between">
           <div className="min-w-0">
-            <p className="eyebrow">{categoryLabels[s.category]}</p>
+            <p className="eyebrow">{s.categoryName}</p>
             <h2 className="mt-2 text-2xl">{s.name}</h2>
             {s.summary ? <p className="mt-2 text-ink">{s.summary}</p> : null}
             <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-ink">

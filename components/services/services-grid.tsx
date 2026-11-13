@@ -6,15 +6,16 @@ import { ReadingsSoon } from "@/components/sections/readings-soon";
 import { Container } from "@/components/ui/container";
 import { RuleTitle } from "@/components/ui/rule-title";
 import { useLiveServices } from "@/lib/use-live-services";
-import { categoryLabels, type Service, type ServiceCategory } from "@/lib/types";
+import type { Service } from "@/lib/types";
 
-const order: ServiceCategory[] = ["tarot", "astrology"];
-
-/** Every live plan, grouped by type. Loads the plans saved in the admin right now. */
+/**
+ * Every live plan, grouped by category in the order the client set. A category with no live plan
+ * is not shown. Loads the plans and categories saved in the admin right now.
+ */
 export function ServicesGrid({ built }: { built: readonly Service[] }) {
-  const { services, checked } = useLiveServices(built);
-  const groups = order
-    .map((category) => ({ category, items: services.filter((s) => s.category === category) }))
+  const { services, categories, checked } = useLiveServices(built);
+  const groups = categories
+    .map((c) => ({ ...c, items: services.filter((s) => s.category === c.slug) }))
     .filter((group) => group.items.length > 0);
 
   if (groups.length === 0)
@@ -27,9 +28,12 @@ export function ServicesGrid({ built }: { built: readonly Service[] }) {
   return (
     <>
       {groups.map((group) => (
-        <section key={group.category} aria-label={categoryLabels[group.category]} className="mb-24 last:mb-0">
+        <section key={group.slug} aria-label={group.name} className="mb-24 last:mb-0">
           <Container>
-            <RuleTitle title={categoryLabels[group.category]} />
+            <RuleTitle title={group.name} />
+            {group.description ? (
+              <p className="mx-auto mt-4 max-w-xl text-center text-ink-muted">{group.description}</p>
+            ) : null}
             <ul className="mt-12 flex flex-wrap justify-center gap-6">
               {group.items.map((service, i) => (
                 <li key={service.slug} className="w-[min(100%,260px)]">

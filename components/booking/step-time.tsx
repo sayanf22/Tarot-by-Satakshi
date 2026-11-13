@@ -254,7 +254,7 @@ export function StepTime({
                 })}
               </div>
               <p className="mt-4 text-xs text-ink-muted">
-                Grey times are already booked or being paid for by someone else. This list updates on its own.
+                Grey times are already booked. This list updates on its own.
               </p>
             </>
           )}

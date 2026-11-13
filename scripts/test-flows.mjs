@@ -1074,6 +1074,274 @@ ok(
   (await mail()).every((e) => !/[\r\n]/.test(e.subject)),
 );
 
+// ---- Categories: the client's own categories, their plans and their booking questions ----
+{
+  const tag = String(Date.now()).slice(-5);
+  const admin = (path, opts = {}) => api(path, { cookie, ip: "10.0.9.1", ...opts });
+  const cleanup = [];
+
+  const before = await admin("/api/admin/categories");
+  ok(
+    "admin lists the categories, with the limit",
+    before.status === 200 && before.data.max === 20 && before.data.categories.some((c) => c.slug === "tarot"),
+    String(before.status),
+  );
+  const signedOut = await api("/api/admin/categories", {
+    method: "POST",
+    ip: "10.0.9.6",
+    json: { name: "Nobody" },
+  });
+  ok("creating a category needs a signed-in admin", signedOut.status === 401, String(signedOut.status));
+
+  const made = await admin("/api/admin/categories", {
+    method: "POST",
+    json: {
+      name: `Numerology ${tag}`,
+      description: "Numbers and the path ahead.",
+      birthDetails: false,
+      active: true,
+    },
+  });
+  ok(
+    "a category is created; its web address comes from the name",
+    made.status === 201 && made.data.slug.startsWith("numerology"),
+    JSON.stringify(made.data),
+  );
+  const slug = made.data.slug;
+  cleanup.push(slug);
+
+  const dup = await admin("/api/admin/categories", {
+    method: "POST",
+    json: { name: "Another", slug, birthDetails: false, active: true },
+  });
+  ok(
+    "a web address already in use is refused",
+    dup.status === 409,
+    `${dup.status} ${JSON.stringify(dup.data)} ${JSON.stringify({ slug })}`,
+  );
+  const markup = await admin("/api/admin/categories", {
+    method: "POST",
+    json: { name: "Bad <b>name</b>", birthDetails: false, active: true },
+  });
+  ok("markup in a category name is refused", markup.status === 400, markup.data?.error);
+  const markupDesc = await admin("/api/admin/categories", {
+    method: "POST",
+    json: {
+      name: `Safe ${tag}`,
+      description: "<img src=x onerror=alert(1)>",
+      birthDetails: false,
+      active: true,
+    },
+  });
+  ok("markup in a description is refused", markupDesc.status === 400, markupDesc.data?.error);
+  const noLatin = await admin("/api/admin/categories", {
+    method: "POST",
+    json: { name: "ज्योतिष", birthDetails: false, active: true },
+  });
+  ok("a name with no English letters asks for a code", noLatin.status === 400, noLatin.data?.error);
+
+  // A plan goes into the new category and shows on the site with its name.
+  const plan1 = await admin("/api/admin/services", {
+    method: "POST",
+    json: {
+      slug: `num-${tag}`,
+      name: `Life Path ${tag}`,
+      category: slug,
+      summary: "",
+      icon: "star",
+      card: "wheel",
+      formats: ["call", "text"],
+      durationMin: 60,
+      pricePaise: 50000,
+      active: true,
+      sortOrder: 5,
+      imageKey: null,
+    },
+  });
+  ok("a plan goes into the new category", plan1.status === 201, JSON.stringify(plan1.data));
+  cleanup.unshift(`plan:num-${tag}`);
+  const pub = await api("/api/services", { ip: "10.0.9.2" });
+  const shown = pub.data.services.find((s) => s.slug === `num-${tag}`);
+  ok(
+    "the site shows the plan with its category name, and lists the category",
+    shown?.categoryName === `Numerology ${tag}` && pub.data.categories.some((c) => c.slug === slug),
+    shown?.categoryName,
+  );
+
+  // Hiding a category hides its plans; a plan can't be added to a hidden category.
+  const hide = await admin(`/api/admin/categories/${slug}`, {
+    method: "PUT",
+    json: {
+      name: `Numerology ${tag}`,
+      description: "Numbers and the path ahead.",
+      birthDetails: false,
+      active: false,
+    },
+  });
+  const pubHidden = await api("/api/services", { ip: "10.0.9.3" });
+  ok(
+    "hiding a category hides its plans from the site",
+    hide.status === 200 && !pubHidden.data.services.some((s) => s.slug === `num-${tag}`),
+  );
+  const intoHidden = await admin("/api/admin/services", {
+    method: "POST",
+    json: {
+      slug: `numh-${tag}`,
+      name: `Hidden ${tag}`,
+      category: slug,
+      summary: "",
+      icon: "star",
+      card: "wheel",
+      formats: ["call"],
+      durationMin: 60,
+      pricePaise: 50000,
+      active: true,
+      sortOrder: 6,
+      imageKey: null,
+    },
+  });
+  ok("a plan can't be added to a hidden category", intoHidden.status === 400, intoHidden.data?.error);
+
+  // A category with plans can't be deleted; once it has none, it can.
+  const delUsed = await admin(`/api/admin/categories/${slug}`, { method: "DELETE" });
+  ok("a category that still has plans can't be deleted", delUsed.status === 409, delUsed.data?.error);
+  await admin(`/api/admin/categories/${slug}`, {
+    method: "PUT",
+    json: {
+      name: `Numerology ${tag}`,
+      description: "Numbers and the path ahead.",
+      birthDetails: false,
+      active: true,
+    },
+  });
+
+  // Order: the list can be reordered; a list that doesn't match the categories is refused.
+  const order = (await admin("/api/admin/categories")).data.categories.map((c) => c.slug);
+  const reversed = [...order].reverse();
+  const reorder = await admin("/api/admin/categories/reorder", { method: "POST", json: { slugs: reversed } });
+  const after = (await admin("/api/admin/categories")).data.categories.map((c) => c.slug);
+  ok("the category order can be changed", reorder.status === 200 && after.join() === reversed.join());
+  const broken = await admin("/api/admin/categories/reorder", {
+    method: "POST",
+    json: { slugs: [reversed[0], reversed[0]] },
+  });
+  ok("a broken order list is refused", broken.status === 409 || broken.status === 400, String(broken.status));
+  await admin("/api/admin/categories/reorder", { method: "POST", json: { slugs: order } });
+
+  // A category that asks for birth details: its booking form asks for them too.
+  const bcat = await admin("/api/admin/categories", {
+    method: "POST",
+    json: { name: `Palmistry ${tag}`, description: "", birthDetails: true, active: true },
+  });
+  const bslug = bcat.data.slug;
+  cleanup.push(bslug);
+  const bplan = await admin("/api/admin/services", {
+    method: "POST",
+    json: {
+      slug: `palm-${tag}`,
+      name: `Palm ${tag}`,
+      category: bslug,
+      summary: "",
+      icon: "star",
+      card: "wheel",
+      formats: ["call"],
+      durationMin: 60,
+      pricePaise: 10000,
+      active: true,
+      sortOrder: 7,
+      imageKey: null,
+    },
+  });
+  ok("a birth-details category and its plan are created", bcat.status === 201 && bplan.status === 201);
+  cleanup.unshift(`plan:palm-${tag}`);
+  let day = null;
+  for (let d = 2; d < 40 && !day; d++) {
+    const date = new Date(Date.now() + d * 864e5 + 5.5 * 36e5).toISOString().slice(0, 10);
+    const { data } = await api(`/api/slots?service=palm-${tag}&date=${date}`, { ip: "10.0.9.7" });
+    const free = (data.slots ?? []).find((s) => s.status === "free");
+    if (free) day = { date, time: free.value };
+  }
+  const bookingBase = {
+    service: `palm-${tag}`,
+    format: "call",
+    date: day?.date,
+    time: day?.time,
+    agreed: true,
+  };
+  const noBirth = await api("/api/bookings", {
+    method: "POST",
+    ip: "10.0.9.8",
+    json: {
+      ...bookingBase,
+      details: { ...details("No Birth"), birthDate: "", birthTime: "", birthPlace: "" },
+    },
+  });
+  ok(
+    "a booking in a birth-details category without birth details is refused",
+    noBirth.status === 400,
+    String(noBirth.status),
+  );
+  const withBirth = await api("/api/bookings", {
+    method: "POST",
+    ip: "10.0.9.8",
+    json: { ...bookingBase, details: details("With Birth") },
+  });
+  ok(
+    "the same booking with birth details is accepted",
+    withBirth.status === 201,
+    JSON.stringify(withBirth.data),
+  );
+
+  // Limit: at most 20 categories, counted by the database in the same statement as the insert.
+  const now20 = (await admin("/api/admin/categories")).data.categories.length;
+  const toFill = 20 - now20;
+  let filled = 0;
+  let fillErr = null;
+  for (let i = 0; i < toFill; i++) {
+    const r = await admin("/api/admin/categories", {
+      method: "POST",
+      ip: `10.9.30.${i + 1}`,
+      json: { name: `Fill ${tag} ${i}`, birthDetails: false, active: true },
+    });
+    if (r.status === 201) {
+      filled++;
+      cleanup.push(r.data.slug);
+    } else if (!fillErr) {
+      fillErr = { status: r.status, data: r.data };
+    }
+  }
+  const over = await admin("/api/admin/categories", {
+    method: "POST",
+    ip: "10.9.31.1",
+    json: { name: `Over ${tag}`, birthDetails: false, active: true },
+  });
+  ok(
+    "no more than 20 categories",
+    filled === toFill && over.status === 409,
+    `${filled}/${toFill} then ${over.status}`,
+  );
+
+  // Clean up everything this block made: plans first, then categories with no plans.
+  for (const item of cleanup) {
+    if (item.startsWith("plan:")) {
+      await admin(`/api/admin/services/${item.slice(5)}`, { method: "DELETE", ip: "10.9.40.1" });
+    }
+  }
+  for (const item of cleanup.filter((i) => !i.startsWith("plan:"))) {
+    const r = await admin(`/api/admin/categories/${item}`, {
+      method: "DELETE",
+      ip: `10.9.41.${cleanup.indexOf(item) + 1}`,
+    });
+    ok(`test category ${item} is removed`, r.status === 200, String(r.status));
+  }
+  const end = (await admin("/api/admin/categories")).data.categories.length;
+  ok(
+    "the category list is back to where it started",
+    end === before.data.categories.length,
+    `${end} (was ${before.data.categories.length})`,
+  );
+}
+
 const out = await api("/api/admin/logout", { method: "POST", json: {}, cookie });
 ok(
   "sign-out ends the session",

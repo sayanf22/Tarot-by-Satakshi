@@ -1,14 +1,20 @@
 import type cards from "@/content/tarot-cards.json";
 
 export type TarotCardId = keyof typeof cards;
-export type ServiceCategory = "tarot" | "astrology";
+/** A category's web name, e.g. "tarot". The client creates her own in the admin. */
+export type ServiceCategory = string;
 export type SessionFormat = "call" | "text";
 export type ServiceIcon = "cards" | "heart" | "sun" | "moon" | "star" | "wheel" | "eye";
 
 export type Service = {
   slug: string;
   name: string;
+  /** The category's web name, e.g. "tarot". */
   category: ServiceCategory;
+  /** The category's display name, e.g. "Tarot". Set by the API so pages need no lookup. */
+  categoryName: string;
+  /** True when booking asks for date, time and place of birth. */
+  birthDetails: boolean;
   summary: string;
   icon: ServiceIcon;
   /** Tarot card image shown for this reading on the home page. */
@@ -25,9 +31,12 @@ export type Service = {
   image?: string;
 };
 
-export const categoryLabels: Record<ServiceCategory, string> = {
-  tarot: "Tarot",
-  astrology: "Astrology",
+/** A category shown on the Services page, in the order the admin set. */
+export type CategoryInfo = {
+  slug: string;
+  name: string;
+  description: string;
+  birthDetails: boolean;
 };
 
 export const formatLabels: Record<SessionFormat, string> = {

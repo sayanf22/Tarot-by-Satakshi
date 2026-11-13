@@ -17,6 +17,15 @@ import { contactInbox, freeSlots, HOME_CARDS, homeCards, unitsFor, type ServiceR
 import { sendAdminChangeEmails, sendCancelEmail, sendMovedEmails, sendRefundEmails } from "../lib/email";
 import { fail, readJson, readText } from "../lib/http";
 import { audit } from "../lib/logs";
+import {
+  CATEGORY_SLUG,
+  categoryCreate,
+  categoryReorder,
+  categoryUpdate,
+  MAX_CATEGORIES,
+  requireShownCategory,
+  slugFromName,
+} from "../lib/categories";
 import { markSiteChanged, publishState, startBuild } from "../lib/publish";
 import {
   contentHash,
@@ -454,7 +463,8 @@ adminRoutes.delete("/enquiries/:id", async (c) => {
 
 const planFields = z.object({
   name: z.string().trim().min(2).max(80),
-  category: z.enum(["tarot", "astrology"]),
+  // Any category the client has created (checked against the database when saved).
+  category: z.string().regex(CATEGORY_SLUG, "Choose a category for this plan"),
   summary: z.string().trim().max(300),
   icon: z.enum(["cards", "heart", "sun", "moon", "star", "wheel", "eye"]),
   card: z.enum(["priestess", "two-cups", "ace-pentacles", "wheel", "hermit", "moon"]),
@@ -472,8 +482,10 @@ const planFields = z.object({
 
 adminRoutes.get("/services", async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT s.*, (SELECT count(*) FROM bookings b WHERE b.service_id = s.id) AS booking_count
-     FROM services s ORDER BY s.archived, s.sort_order, s.id`,
+    `SELECT s.*, COALESCE(c.name, s.category) AS category_name,
+       (SELECT count(*) FROM bookings b WHERE b.service_id = s.id) AS booking_count
+     FROM services s LEFT JOIN categories c ON c.slug = s.category
+     ORDER BY s.archived, s.sort_order, s.id`,
   ).all<ServiceRow & { booking_count: number }>();
   return c.json({
     services: results,
@@ -539,6 +551,137 @@ adminRoutes.post("/alerts/seen-bookings", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---- Categories: the client adds her own (Tarot, Astrology and any others) ----
+// Every route below sits behind the admin session, same-origin and rate-limit middleware above.
+
+adminRoutes.get("/categories", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT c.slug, c.name, c.description, c.birth_details, c.active, c.sort_order,
+       (SELECT count(*) FROM services s WHERE s.category = c.slug) AS plan_count
+     FROM categories c ORDER BY c.sort_order, c.id`,
+  ).all<{
+    slug: string;
+    name: string;
+    description: string;
+    birth_details: number;
+    active: number;
+    sort_order: number;
+    plan_count: number;
+  }>();
+  return c.json({
+    max: MAX_CATEGORIES,
+    categories: results.map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      description: r.description,
+      birthDetails: r.birth_details === 1,
+      active: r.active === 1,
+      sortOrder: r.sort_order,
+      planCount: r.plan_count,
+    })),
+  });
+});
+
+adminRoutes.post("/categories", async (c) => {
+  const body = categoryCreate.safeParse(await readJson(c));
+  if (!body.success) fail(400, body.error.issues[0]?.message ?? "Please check the category");
+  const s = body.data;
+  const slug = s.slug ?? slugFromName(s.name);
+  const now = Date.now();
+  const last = await c.env.DB.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories").first<{
+    m: number;
+  }>();
+  let changes = 0;
+  try {
+    // The limit check and the insert are one statement, so two creates at once can't pass it.
+    const res = await c.env.DB.prepare(
+      `INSERT INTO categories (slug, name, description, birth_details, active, sort_order, created_at, updated_at)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7 WHERE (SELECT count(*) FROM categories) < ?8`,
+    )
+      .bind(
+        slug,
+        s.name,
+        s.description,
+        s.birthDetails ? 1 : 0,
+        s.active ? 1 : 0,
+        (last?.m ?? 0) + 10,
+        now,
+        MAX_CATEGORIES,
+      )
+      .run();
+    changes = res.meta.changes;
+  } catch {
+    fail(409, "A category with that web address already exists. Choose another address.");
+  }
+  if (!changes) fail(409, `You can have up to ${MAX_CATEGORIES} categories.`);
+  await audit(c.env, actor(c), "category.create", slug);
+  await markSiteChanged(c.env);
+  return c.json({ slug }, 201);
+});
+
+// The web address (slug) never changes after creation, so plans and old bookings keep their link.
+adminRoutes.put("/categories/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  if (!CATEGORY_SLUG.test(slug)) fail(404, "Category not found");
+  const body = categoryUpdate.safeParse(await readJson(c));
+  if (!body.success) fail(400, body.error.issues[0]?.message ?? "Please check the category");
+  const s = body.data;
+  const res = await c.env.DB.prepare(
+    "UPDATE categories SET name = ?1, description = ?2, birth_details = ?3, active = ?4, updated_at = ?5 WHERE slug = ?6",
+  )
+    .bind(s.name, s.description, s.birthDetails ? 1 : 0, s.active ? 1 : 0, Date.now(), slug)
+    .run();
+  if (!res.meta.changes) fail(404, "Category not found");
+  await audit(c.env, actor(c), "category.update", slug, s.active ? "shown" : "hidden");
+  await markSiteChanged(c.env);
+  return c.json({ ok: true });
+});
+
+/** Sets the order the categories appear on the Services page: the slugs, top to bottom. */
+adminRoutes.post("/categories/reorder", async (c) => {
+  const body = categoryReorder.safeParse(await readJson(c));
+  if (!body.success) fail(400, "Please check the order");
+  const wanted = body.data.slugs;
+  const { results } = await c.env.DB.prepare("SELECT slug FROM categories").all<{ slug: string }>();
+  const have = new Set(results.map((r) => r.slug));
+  const unique = new Set(wanted);
+  if (unique.size !== wanted.length || wanted.length !== have.size || wanted.some((s) => !have.has(s)))
+    fail(409, "The list changed. Reload the page and try again.");
+  const now = Date.now();
+  await c.env.DB.batch(
+    wanted.map((slug, i) =>
+      c.env.DB.prepare("UPDATE categories SET sort_order = ?1, updated_at = ?2 WHERE slug = ?3").bind(
+        (i + 1) * 10,
+        now,
+        slug,
+      ),
+    ),
+  );
+  await audit(c.env, actor(c), "category.reorder", "", wanted.join(","));
+  await markSiteChanged(c.env);
+  return c.json({ ok: true });
+});
+
+/** Deletes a category only when no plan uses it. Otherwise it can be hidden instead. */
+adminRoutes.delete("/categories/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  if (!CATEGORY_SLUG.test(slug)) fail(404, "Category not found");
+  const used = await c.env.DB.prepare("SELECT count(*) AS n FROM services WHERE category = ?1")
+    .bind(slug)
+    .first<{ n: number }>();
+  if ((used?.n ?? 0) > 0)
+    fail(409, "This category has plans. Move or delete those plans first, or hide the category instead.");
+  const res = await c.env.DB.prepare(
+    "DELETE FROM categories WHERE slug = ?1 AND NOT EXISTS (SELECT 1 FROM services WHERE category = ?1)",
+  )
+    .bind(slug)
+    .run();
+  if (!res.meta.changes) fail(404, "Category not found");
+  await audit(c.env, actor(c), "category.delete", slug);
+  await markSiteChanged(c.env);
+  return c.json({ ok: true });
+});
+
 /** How many plans the home page deck shows. The Services page always lists every plan. */
 adminRoutes.put("/home-cards", async (c) => {
   const body = z
@@ -561,6 +704,7 @@ adminRoutes.post("/services", async (c) => {
     .safeParse(await readJson(c));
   if (!body.success) fail(400, "Please check the plan details");
   const s = body.data;
+  await requireShownCategory(c.env.DB, s.category);
   const now = Date.now();
   try {
     await c.env.DB.prepare(
@@ -597,6 +741,12 @@ adminRoutes.put("/services/:slug", async (c) => {
   const body = planFields.safeParse(await readJson(c));
   if (!body.success) fail(400, "Please check the plan details");
   const s = body.data;
+  // A plan that stays in its category can be saved even if that category is hidden now.
+  const current = await c.env.DB.prepare("SELECT category FROM services WHERE slug = ?1")
+    .bind(c.req.param("slug"))
+    .first<{ category: string }>();
+  if (!current) fail(404, "Plan not found");
+  if (current.category !== s.category) await requireShownCategory(c.env.DB, s.category);
   const res = await c.env.DB.prepare(
     `UPDATE services SET name = ?1, category = ?2, summary = ?3, icon = ?4, card = ?5, formats = ?6,
        duration_min = ?7, price_paise = ?8, is_sample = ?9, active = ?10, sort_order = ?11, image_key = ?12,

@@ -32,7 +32,7 @@ const states = {
   expired: {
     icon: Clock,
     title: "Your time slot was released",
-    text: "The hold ran out before payment finished. If money already left your account, don't pay again: the booking is confirmed automatically if the time is still free, or the full amount comes back to you, and you'll get an email either way. Otherwise, please choose a time again.",
+    text: "The payment wasn't completed in time, so this time isn't booked. If money already left your account, don't pay again: the time is booked automatically if it's still free, or the full amount comes back to you, and you'll get an email either way.",
     action: { href: "/book", label: "Choose a time" },
   },
   refunded: {

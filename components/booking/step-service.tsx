@@ -4,7 +4,7 @@ import { ReadingsSoon } from "@/components/sections/readings-soon";
 import { ServiceMeta } from "@/components/services/service-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { categoryLabels, type Service, type SessionFormat } from "@/lib/types";
+import type { Service, SessionFormat } from "@/lib/types";
 
 const formatOptions: Record<SessionFormat, { title: string; text: string; icon: typeof PhoneCall }> = {
   call: { title: "Call", text: "A phone call with Satakshi.", icon: PhoneCall },
@@ -44,7 +44,7 @@ export function ServiceChoice({
       <span className="min-w-0">
         <span className="block font-display text-lg leading-snug text-ink">{s.name}</span>
         <span className="mt-0.5 block text-sm text-ink-muted">
-          {categoryLabels[s.category]} · {s.summary}
+          {s.categoryName} · {s.summary}
         </span>
         <span className="mt-2 flex text-sm">
           <ServiceMeta service={s} />

@@ -156,7 +156,7 @@ export function BookingFlow({ services: built }: { services: readonly Service[] 
           {step === 3 && service ? (
             <StepDetails
               key={service.category}
-              needsBirthDetails={service.category === "astrology"}
+              needsBirthDetails={service.birthDetails}
               initial={details}
               onBack={() => goTo(2)}
               onSubmit={(values) => {

@@ -8,14 +8,16 @@ import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { ServiceGlyph } from "@/components/ui/service-glyph";
 import { cn } from "@/lib/cn";
 import { formatDuration, formatPrice } from "@/lib/format";
-import { categoryLabels, sessionLabel, type Service, type ServiceIcon, type TarotCardId } from "@/lib/types";
+import { sessionLabel, type Service, type ServiceIcon, type TarotCardId } from "@/lib/types";
+import { type AdminCategory } from "./categories";
 import { PlanPreview } from "./plan-preview";
 import { Notice, useAdminApi } from "./shared";
 
 export type Plan = {
   slug: string;
   name: string;
-  category: "tarot" | "astrology";
+  category: string;
+  category_name: string;
   summary: string;
   icon: string;
   card: string;
@@ -35,7 +37,7 @@ export type Photo = { key: string; alt: string };
 export type Form = {
   slug: string;
   name: string;
-  category: "tarot" | "astrology";
+  category: string;
   summary: string;
   icon: string;
   card: string;
@@ -53,7 +55,7 @@ export type Form = {
 export const blank: Form = {
   slug: "",
   name: "",
-  category: "tarot",
+  category: "",
   summary: "",
   icon: "cards",
   card: "priestess",
@@ -294,19 +296,26 @@ export function PlanForm({
   isNew,
   photos,
   others,
+  categories,
   onDone,
   onSaved,
 }: {
   initial: Form;
   isNew: boolean;
   photos: Photo[];
+  /** Every category the client has created (hidden ones are shown only for a plan already in them). */
+  categories: AdminCategory[];
   /** The other plans, to pick a free web address and an order. */
   others: { slug: string; name: string; sort_order: number }[];
   onDone: () => void;
   onSaved: (message: string) => void;
 }) {
   const adminApi = useAdminApi();
-  const [f, setF] = useState(initial);
+  // The categories a plan can go in: shown ones, plus the one this plan is already in.
+  const choices = categories.filter((c) => c.active || c.slug === initial.category);
+  const [f, setF] = useState<Form>(() =>
+    initial.category ? initial : { ...initial, category: choices[0]?.slug ?? "" },
+  );
   const [step, setStep] = useState(0);
   const [reached, setReached] = useState(isNew ? 0 : steps.length - 1);
   const [showErrors, setShowErrors] = useState(false);
@@ -340,14 +349,15 @@ export function PlanForm({
     return `${base.slice(0, 40)}-${others.length + 100}`;
   }
 
-  function changeCategory(category: Form["category"]) {
+  function changeCategory(category: string) {
+    const asksBirth = categories.find((c) => c.slug === category)?.birthDetails ?? false;
     setF((x) => ({
       ...x,
       category,
-      // Until she picks a look herself, the look follows the type.
+      // Until she picks a look herself, the look follows the type (astrology-style gets the wheel).
       ...(lookTouched
         ? {}
-        : category === "astrology"
+        : asksBirth
           ? { icon: "star", card: "wheel" }
           : { icon: "cards", card: "priestess" }),
     }));
@@ -445,6 +455,8 @@ export function PlanForm({
     slug: (isNew ? freeSlug() : f.slug) || "your-plan",
     name: f.name.trim() || "Your plan name",
     category: f.category,
+    categoryName: categories.find((c) => c.slug === f.category)?.name ?? f.category,
+    birthDetails: categories.find((c) => c.slug === f.category)?.birthDetails ?? false,
     summary: f.summary.trim() || "A short line about this reading.",
     icon: f.icon as ServiceIcon,
     card: f.card as TarotCardId,
@@ -502,24 +514,36 @@ export function PlanForm({
 
             <fieldset>
               <legend className="mb-2 text-sm font-semibold text-ink">Type of reading</legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {(["tarot", "astrology"] as const).map((c) => (
-                  <Tile
-                    key={c}
-                    active={f.category === c}
-                    onClick={() => changeCategory(c)}
-                    label={categoryLabels[c]}
-                    className="p-4"
-                  >
-                    <span className="block font-semibold text-ink">{categoryLabels[c]}</span>
-                    <span className="mt-0.5 block pr-6 text-sm text-ink-muted">
-                      {c === "tarot"
-                        ? "Booking asks for name, email and phone."
-                        : "Booking also asks for birth date, time and place."}
-                    </span>
-                  </Tile>
-                ))}
-              </div>
+              {choices.length === 0 ? (
+                <Notice tone="error">
+                  There are no categories yet. Add one in Plans → Categories first, then come back to add this
+                  plan.
+                </Notice>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {choices.map((c) => (
+                    <Tile
+                      key={c.slug}
+                      active={f.category === c.slug}
+                      onClick={() => changeCategory(c.slug)}
+                      label={c.name}
+                      className="p-4"
+                    >
+                      <span className="block font-semibold text-ink">
+                        {c.name}{" "}
+                        {!c.active ? (
+                          <span className="text-xs font-medium text-ink-muted">(hidden)</span>
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 block pr-6 text-sm text-ink-muted">
+                        {c.birthDetails
+                          ? "Booking also asks for birth date, time and place."
+                          : "Booking asks for name, email and phone."}
+                      </span>
+                    </Tile>
+                  ))}
+                </div>
+              )}
             </fieldset>
           </div>
         ) : null}
@@ -720,7 +744,7 @@ export function PlanForm({
                 {(
                   [
                     [0, "Name", f.name.trim() || "—"],
-                    [0, "Type", categoryLabels[f.category]],
+                    [0, "Type", categories.find((c) => c.slug === f.category)?.name ?? "—"],
                     [1, "Price", errors.price ? "—" : formatPrice(priceN * 100)],
                     [1, "Length", errors.duration ? "—" : formatDuration(minsN)],
                     [1, "Session", errors.formats ? "—" : sessionLabel(chosenFormats)],

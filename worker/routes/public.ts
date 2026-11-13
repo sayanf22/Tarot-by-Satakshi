@@ -6,6 +6,7 @@ import type { AppContext } from "../env";
 import { settleByPaymentId } from "../lib/bookings";
 import { bookingRef } from "../lib/crypto";
 import {
+  activeCategories,
   activeServices,
   homeCards,
   bookable,
@@ -49,10 +50,14 @@ publicRoutes.get("/config", async (c) =>
 
 publicRoutes.get("/services", async (c) => {
   await rateLimit(c, "RL_READ", "services");
-  const [services, home] = await Promise.all([activeServices(c.env.DB), homeCards(c.env.DB)]);
-  // Never cached, so a plan saved in the admin shows on the next page load.
+  const [services, categories, home] = await Promise.all([
+    activeServices(c.env.DB),
+    activeCategories(c.env.DB),
+    homeCards(c.env.DB),
+  ]);
+  // Never cached, so a plan or category saved in the admin shows on the next page load.
   c.header("Cache-Control", "no-store");
-  return c.json({ services: services.map(publicService), homeCards: home });
+  return c.json({ services: services.map(publicService), categories, homeCards: home });
 });
 
 /**
@@ -144,7 +149,9 @@ publicRoutes.post("/bookings", async (c) => {
   if (!service) fail(404, "Reading not found");
   if (!bookable(service)) fail(409, "This reading can't be booked online yet");
   if (!service.formats.split(",").includes(b.format)) fail(400, "That session type isn't offered");
-  const details = detailsSchema(service.category === "astrology").safeParse(b.details);
+  // Birth details are asked for by the category, not by its name.
+  const askBirth = service.birth_details === 1;
+  const details = detailsSchema(askBirth).safeParse(b.details);
   if (!details.success) fail(400, "Please check your details and try again");
   const d = details.data;
 
@@ -157,16 +164,15 @@ publicRoutes.post("/bookings", async (c) => {
   const now = Date.now();
   const id = bookingRef();
   const holdUntil = now + settings.holdMinutes * MINUTE;
-  const answers =
-    service.category === "astrology"
-      ? {
-          "Date of birth": d.birthDate,
-          "Time of birth": d.birthTimeUnknown
-            ? `Not known${d.birthTimeApprox ? ` (about ${d.birthTimeApprox})` : ""}`
-            : d.birthTime,
-          "Place of birth": d.birthPlace,
-        }
-      : {};
+  const answers = askBirth
+    ? {
+        "Date of birth": d.birthDate,
+        "Time of birth": d.birthTimeUnknown
+          ? `Not known${d.birthTimeApprox ? ` (about ${d.birthTimeApprox})` : ""}`
+          : d.birthTime,
+        "Place of birth": d.birthPlace,
+      }
+    : {};
   const snapshot = JSON.stringify({
     slug: service.slug,
     name: service.name,

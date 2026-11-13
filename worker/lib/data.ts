@@ -4,7 +4,11 @@ export type ServiceRow = {
   id: number;
   slug: string;
   name: string;
-  category: "tarot" | "astrology";
+  /** The category's web name, e.g. "tarot". */
+  category: string;
+  /** Set by the joins below: the category's display name and whether birth details are asked. */
+  category_name: string;
+  birth_details: number;
   summary: string;
   icon: string;
   card: string;
@@ -29,6 +33,8 @@ export function publicService(s: ServiceRow) {
     slug: s.slug,
     name: s.name,
     category: s.category,
+    categoryName: s.category_name,
+    birthDetails: s.birth_details === 1,
     summary: s.summary,
     icon: s.icon,
     card: s.card,
@@ -41,18 +47,39 @@ export function publicService(s: ServiceRow) {
   };
 }
 
+// A plan is shown and bookable only while its plan and its category are both shown.
+const SERVICE_SELECT = `SELECT s.*, c.name AS category_name, c.birth_details AS birth_details
+  FROM services s JOIN categories c ON c.slug = s.category`;
+
 export async function activeServices(db: D1Database) {
   const { results } = await db
-    .prepare("SELECT * FROM services WHERE active = 1 AND archived = 0 ORDER BY sort_order, id")
+    .prepare(
+      `${SERVICE_SELECT} WHERE s.active = 1 AND s.archived = 0 AND c.active = 1 ORDER BY s.sort_order, s.id`,
+    )
     .all<ServiceRow>();
   return results;
 }
 
 export async function serviceBySlug(db: D1Database, slug: string) {
   return db
-    .prepare("SELECT * FROM services WHERE slug = ?1 AND active = 1 AND archived = 0")
+    .prepare(`${SERVICE_SELECT} WHERE s.slug = ?1 AND s.active = 1 AND s.archived = 0 AND c.active = 1`)
     .bind(slug)
     .first<ServiceRow>();
+}
+
+/** The categories shown on the site, in the order the admin set. */
+export async function activeCategories(db: D1Database) {
+  const { results } = await db
+    .prepare(
+      "SELECT slug, name, description, birth_details FROM categories WHERE active = 1 ORDER BY sort_order, id",
+    )
+    .all<{ slug: string; name: string; description: string; birth_details: number }>();
+  return results.map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    description: c.description,
+    birthDetails: c.birth_details === 1,
+  }));
 }
 
 /**
