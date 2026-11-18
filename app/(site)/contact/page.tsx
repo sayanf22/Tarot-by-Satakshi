@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import { ArrowUpRight, Clock, Mail, PhoneCall } from "lucide-react";
 import { Mandala } from "@/components/art/mandala";
 import { ContactForm } from "@/components/contact/contact-form";
@@ -6,10 +7,12 @@ import { PageIntro } from "@/components/layout/page-intro";
 import { Container } from "@/components/ui/container";
 import { site } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "Contact",
-  description: "Questions before you book? Call, email or send Satakshi a message.",
-};
+  description:
+    "Questions before you book? Call, email or send Satakshi a message on WhatsApp. Monday to Saturday, 11 am to 9 pm IST.",
+  path: "/contact",
+});
 
 const channels = [
   { icon: PhoneCall, label: "Call", value: site.phone.display, href: site.phone.href },

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -18,6 +19,7 @@ import { Mandala } from "@/components/art/mandala";
 import { SessionChoice } from "@/components/home/session-panel";
 import { Photo } from "@/components/media/photo";
 import { TarotLineArt, type TarotCardId } from "@/components/media/tarot-image";
+import { JsonLd } from "@/components/seo/json-ld";
 import { Reveal } from "@/components/motion/reveal";
 import { SplitWords } from "@/components/motion/split-words";
 import { AskPanel } from "@/components/sections/ask-panel";
@@ -34,11 +36,12 @@ import { cn } from "@/lib/cn";
 import { site } from "@/lib/site";
 import type { Topic } from "@/lib/validation/booking";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "About Satakshi",
   description:
     "Meet Satakshi Kapoor, tarot and Akashic record reader, recognised at the HERstory Times Inspiration Awards 2024. Readings on call and text, Monday to Saturday.",
-};
+  path: "/about",
+});
 
 // Copy uses only confirmed facts: her name, what she reads, call and text sessions,
 // her hours, the topics on the booking form she approved, and how booking works.
@@ -78,6 +81,7 @@ const topicIcons: Record<Topic, LucideIcon> = {
 export default function AboutPage() {
   return (
     <>
+      <JsonLd page="about" />
       {/* Intro: framed photo and a short introduction. */}
       <section>
         <Container className="grid items-center gap-14 py-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20 lg:py-20">

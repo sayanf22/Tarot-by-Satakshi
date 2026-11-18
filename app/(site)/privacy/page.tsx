@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import { Bullets, LegalPage, type LegalSection } from "@/components/legal/legal-page";
 import { site } from "@/lib/site";
 
 const description = "What personal information we collect, why we use it, who sees it, and your choices.";
 
-export const metadata: Metadata = {
-  title: "Privacy policy",
-  description,
-};
+export const metadata: Metadata = pageMeta({ title: "Privacy policy", description, path: "/privacy" });
 
 const sections: LegalSection[] = [
   {

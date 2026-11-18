@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import { TextLink } from "@/components/legal/legal-page";
 import { PageIntro } from "@/components/layout/page-intro";
 import { PricingList } from "@/components/pricing/pricing-list";
 import { Container } from "@/components/ui/container";
 import { services } from "@/content/services";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "Pricing",
-  description: "What each tarot and astrology reading costs with Satakshi, in Indian rupees (INR).",
-};
+  description:
+    "What each tarot and astrology reading costs with Satakshi, in Indian rupees (INR), with the length of each session.",
+  path: "/pricing",
+});
 
 export default function PricingPage() {
   return (

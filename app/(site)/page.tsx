@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -28,7 +29,15 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { homeCards, services } from "@/content/services";
 import { topicCards } from "@/content/topics";
 import { cn } from "@/lib/cn";
+import { JsonLd } from "@/components/seo/json-ld";
+import { pageMeta } from "@/lib/seo";
 import { site } from "@/lib/site";
+
+export const metadata: Metadata = pageMeta({
+  description:
+    "Book a personal tarot or astrology reading with Satakshi Kapoor, on call or text. Monday to Saturday, 11 am to 9 pm IST. Pay online and get a confirmation email.",
+  path: "/",
+});
 
 const steps: ReadonlyArray<{ title: string; text: string; icon: LucideIcon }> = [
   { title: "Choose a reading", text: "Then pick a call or a text session.", icon: Layers },
@@ -56,6 +65,7 @@ const heroFacts: ReadonlyArray<{ icon: LucideIcon; label: string; title: string;
 export default function HomePage() {
   return (
     <>
+      <JsonLd page="home" />
       {/* Hero: words on the left, three cards fanned on a turning mandala on the right. */}
       {/* Order on load: title word by word, the line under it word by word,
           then the buttons and the icon row one at a time. */}

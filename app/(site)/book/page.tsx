@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import { Suspense } from "react";
 import { BookingFlow } from "@/components/booking/booking-flow";
 import { PageIntro } from "@/components/layout/page-intro";
 import { Container } from "@/components/ui/container";
 import { services } from "@/content/services";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "Book a Session",
-  description: "Choose a tarot or astrology reading, pick a time and book your session with Satakshi.",
-};
+  description:
+    "Choose a tarot or astrology reading, pick a time and book your session with Satakshi, on call or text. Pay online and get a confirmation email.",
+  path: "/book",
+});
 
 export default function BookPage() {
   return (

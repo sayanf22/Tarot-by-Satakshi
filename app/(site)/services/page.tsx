@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import { PageIntro } from "@/components/layout/page-intro";
 import { Reveal } from "@/components/motion/reveal";
 import { AskPanel } from "@/components/sections/ask-panel";
@@ -9,11 +10,12 @@ import { Container } from "@/components/ui/container";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { services } from "@/content/services";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "Services",
   description:
     "Tarot and astrology readings with Satakshi, on call or text. Choose a reading and book a time.",
-};
+  path: "/services",
+});
 
 export default function ServicesPage() {
   return (

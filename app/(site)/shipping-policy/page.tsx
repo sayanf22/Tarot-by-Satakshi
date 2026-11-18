@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import { Bullets, LegalPage, type LegalSection } from "@/components/legal/legal-page";
 import { site } from "@/lib/site";
 
 const description = "Tarot by Satakshi sends no parcels. This page explains how your reading is delivered.";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "Shipping and delivery policy",
   description,
-};
+  path: "/shipping-policy",
+});
 
 const sections: LegalSection[] = [
   {

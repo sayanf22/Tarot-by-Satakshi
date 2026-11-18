@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import { Bullets, LegalPage, type LegalSection } from "@/components/legal/legal-page";
 import { site } from "@/lib/site";
 
 const description =
   "When a payment can be refunded, how to move a session, how to ask for a refund, and how long it takes.";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "Refund and cancellation policy",
   description,
-};
+  path: "/refund-policy",
+});
 
 const h = site.rescheduleHours;
 
