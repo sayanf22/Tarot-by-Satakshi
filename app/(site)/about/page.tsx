@@ -21,6 +21,7 @@ import { TarotLineArt, type TarotCardId } from "@/components/media/tarot-image";
 import { Reveal } from "@/components/motion/reveal";
 import { SplitWords } from "@/components/motion/split-words";
 import { AskPanel } from "@/components/sections/ask-panel";
+import { Awards } from "@/components/sections/awards";
 import { BookingCta } from "@/components/sections/booking-cta";
 import { FaqList } from "@/components/sections/faq-list";
 import { ButtonLink } from "@/components/ui/button";
@@ -36,7 +37,7 @@ import type { Topic } from "@/lib/validation/booking";
 export const metadata: Metadata = {
   title: "About Satakshi",
   description:
-    "Meet Satakshi Kapoor, who offers tarot and astrology readings on call and text, Monday to Saturday.",
+    "Meet Satakshi Kapoor, tarot and Akashic record reader, recognised at the HERstory Times Inspiration Awards 2024. Readings on call and text, Monday to Saturday.",
 };
 
 // Copy uses only confirmed facts: her name, what she reads, call and text sessions,
@@ -163,6 +164,9 @@ export default function AboutPage() {
           </ul>
         </Container>
       </section>
+
+      {/* Awards and press features she sent. */}
+      <Awards />
 
       {/* What she reads: tarot and astrology, each with its engraved card. */}
       <section className="py-16 lg:py-24">

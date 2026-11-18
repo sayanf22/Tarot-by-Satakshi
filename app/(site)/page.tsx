@@ -20,6 +20,7 @@ import { Photo } from "@/components/media/photo";
 import { Reveal } from "@/components/motion/reveal";
 import { SplitWords } from "@/components/motion/split-words";
 import { AskPanel } from "@/components/sections/ask-panel";
+import { Awards } from "@/components/sections/awards";
 import { FaqList } from "@/components/sections/faq-list";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
@@ -187,6 +188,9 @@ export default function HomePage() {
           </div>
         </Container>
       </section>
+
+      {/* Awards and press features she sent. */}
+      <Awards />
 
       {/* How it works: four cards, alternating dark and light (like the reference's card row). */}
       <section className="py-16 lg:py-24">

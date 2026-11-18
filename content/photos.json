@@ -36,5 +36,39 @@
         "width": 1200
       }
     ]
+  },
+  "awardHerstory": {
+    "alt": "HERstory Times Inspiration Awards 2024 card: Satakshi Kapoor, Tarot and Akashic Record Reader",
+    "width": 1080,
+    "height": 1080,
+    "sources": [
+      {
+        "src": "/images/satakshi-award-herstory-480.webp",
+        "width": 480
+      },
+      {
+        "src": "/images/satakshi-award-herstory-800.webp",
+        "width": 800
+      },
+      {
+        "src": "/images/satakshi-award-herstory-1080.webp",
+        "width": 1080
+      }
+    ]
+  },
+  "featureGlorious": {
+    "alt": "Glorious magazine page on Satakshi Kapoor, titled A Journey into the Mystical Arts",
+    "width": 621,
+    "height": 877,
+    "sources": [
+      {
+        "src": "/images/satakshi-feature-glorious-480.webp",
+        "width": 480
+      },
+      {
+        "src": "/images/satakshi-feature-glorious-621.webp",
+        "width": 621
+      }
+    ]
   }
 }

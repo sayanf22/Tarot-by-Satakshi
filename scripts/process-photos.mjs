@@ -22,6 +22,22 @@ const photos = [
     top: 0,
     bottom: 0.92,
   },
+  // Awards and features she sent (18 Nov 2026). Shown whole: no crop.
+  // The HERstory Times file was a video; this is a still of its final frame (no video on the site).
+  {
+    id: "awardHerstory",
+    src: "image/award-herstory-2024.png",
+    alt: "HERstory Times Inspiration Awards 2024 card: Satakshi Kapoor, Tarot and Akashic Record Reader",
+    top: 0,
+    bottom: 1,
+  },
+  {
+    id: "featureGlorious",
+    src: "image/award-glorious-feature.jpeg",
+    alt: "Glorious magazine page on Satakshi Kapoor, titled A Journey into the Mystical Arts",
+    top: 0,
+    bottom: 1,
+  },
 ];
 
 const widths = [480, 800, 1200];
@@ -33,8 +49,11 @@ for (const p of photos) {
   const top = Math.round(meta.height * p.top);
   const height = Math.round(meta.height * (p.bottom - p.top));
   const sources = [];
-  for (const w of widths) {
-    const file = `satakshi-${p.id}-${w}.webp`;
+  // Never enlarge: sizes above the original are replaced by the original width.
+  const sizes = [...new Set(widths.map((w) => Math.min(w, meta.width)))];
+  for (const w of sizes) {
+    const slug = p.id.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+    const file = `satakshi-${slug}-${w}.webp`;
     await sharp(p.src)
       .rotate()
       .extract({ left: 0, top, width: meta.width, height })
